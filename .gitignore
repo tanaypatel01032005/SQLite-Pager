@@ -1,0 +1,4 @@
+﻿experiment.db
+systems_experiment.db
+*.db-wal
+*.db-shm
