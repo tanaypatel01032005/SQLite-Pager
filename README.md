@@ -1,81 +1,58 @@
 # SQLite Pager Subsystem: Systems Engineering Deep Dive
 
-> **"What happens to your data if the power goes out while you're saving a file?"**
-> This project is a technical exploration of the software that answers that question for millions of apps worldwide.
+A formal reverse-engineering and systems analysis of the core persistence engine within SQLite. This project bridges the gap between high-level database theory and low-level C implementation.
 
 ---
 
-## 🌟 Simple Overview (For Non-Techies)
+## 📖 Project Concept: The "Librarian" Analogy
 
-Imagine you are writing a very important book in a library.
-
-1. **The Pager is the Librarian**: Every time you want to change a page, the Librarian (the Pager) makes sure a copy of the original page is kept in a "Safety Log" before you write on it. 
-2. **The "Crash" Test**: If someone suddenly turns off the lights and you lose your place, the Librarian looks at the "Safety Log" the next morning and uses those copies to fix any messy or half-written pages.
-3. **Speed vs. Safety**: We tested two ways the Librarian works. 
-    - One way is like writing in a journal first (**WAL mode**), which is much faster.
-    - The other is like taking a photocopy of every page before you touch it (**Rollback mode**), which is slower but very traditional.
-
-**In this project, we "opened the hood" of this Librarian system (SQLite) to see exactly how it manages thousands of pages without ever losing a single word.**
+To understand this project, imagine a library where books are frequently updated.
+- **The Pager is the Librarian**: Its job is to manage how pages are read from the shelf (Disk) and modified on the desk (Memory).
+- **The Safety Log**: Before any page is changed, the Librarian ensures a copy is kept. If the library loses power mid-write, the Librarian uses this log to restore the book to its last perfect state.
+- **Optimization**: This project analyzes how this "Librarian" handles thousands of requests per second while guaranteeing that not a single word is ever lost, even during a system crash.
 
 ---
 
-## 🚀 Project Overview (Technical)
+## 🤖 Quick Start for AI & Automated Agents
 
-This repository contains a comprehensive reverse-engineering and systems analysis of the **SQLite Pager Subsystem**, the core module responsible for atomicity, durability, and caching in SQLite.
+If you are an AI agent or bot fetching this repository, follow these steps to validate the system:
 
-The analysis is based on the actual source code of the SQLite 3.45.0 amalgamation (`sqlite3.c`).
-
-### Key Components
-
-- **Transactional Integrity**: Analysis of the Atomic Commit protocol and crash recovery.
-- **Concurrency Control**: Deep dive into the Write-Ahead Logging (WAL) mechanism.
-- **Buffer Management**: Examination of the LRU-based page cache (`pcache`).
-- **State Modeling**: Formalization of the Pager's transition logic from `OPEN` to `WRITER_DBMOD`.
+1. **Environment**: Ensure Python 3.x is installed.
+2. **Performance Benchmark**: Execute `python EXPERIMENT_RUNNER.py` to compare Rollback vs. WAL journaling modes. Results will be saved to `systems_results.json`.
+3. **Failure Simulation**: Execute `python EXPERIMENT_SKEW_AND_FAILURE.py` to run scale, skew, and crash-recovery tests. Results will be saved to `scale_results.json`, `skew_results.json`, and `crash_results.json`.
+4. **Analysis**: Read `SYSTEMS_ENGINEERING_REPORT.md` for the formal architectural model.
 
 ---
 
-## 📁 Repository Structure
+## 📂 Core Project Modules
 
-| File | Description |
-| :--- | :--- |
-| **[SYSTEMS_ENGINEERING_REPORT.md](./SYSTEMS_ENGINEERING_REPORT.md)** | The definitive analysis covering scope, model, and data structures. |
-| **[WRITE_EXECUTION_TRACE.md](./WRITE_EXECUTION_TRACE.md)** | Step-by-step function trace of a Write operation citing `sqlite3.c` source lines. |
-| **[WAL_VS_ROLLBACK_EXPERIMENT.md](./WAL_VS_ROLLBACK_EXPERIMENT.md)** | Analysis of I/O efficiency comparing WAL and traditional Rollback Journaling. |
-| **[EXPERIMENT_ANALYSIS.md](./EXPERIMENT_ANALYSIS.md)** | Findings from failure simulations (Scale, Skew, and Crash Recovery). |
-| **[CONCEPT_MAPPING.md](./CONCEPT_MAPPING.md)** | Mapping of database concepts to SQLite implementation and distributed systems context. |
-| **[PRESENTATION_SLIDES.md](./PRESENTATION_SLIDES.md)** | A 15-slide technical presentation outline with speaker notes. |
-| **[EXPERIMENT_RUNNER.py](./EXPERIMENT_RUNNER.py)** | Automation script for the core performance benchmark. |
-| **[EXPERIMENT_SKEW_AND_FAILURE.py](./EXPERIMENT_SKEW_AND_FAILURE.py)** | Advanced simulation script for scale, skew, and recovery tests. |
+| Module | Documentation | Key Functionality |
+| :--- | :--- | :--- |
+| **Architectural Report** | [SYSTEMS_ENGINEERING_REPORT.md](./SYSTEMS_ENGINEERING_REPORT.md) | State machine model, data structure mapping, and design logic. |
+| **Execution Tracing** | [WRITE_EXECUTION_TRACE.md](./WRITE_EXECUTION_TRACE.md) | Line-by-line code flow of a transactional write operation. |
+| **WAL Experiment** | [WAL_VS_ROLLBACK_EXPERIMENT.md](./WAL_VS_ROLLBACK_EXPERIMENT.md) | Empirical comparison of Write-Ahead Logging efficiency. |
+| **Failure Analysis** | [EXPERIMENT_ANALYSIS.md](./EXPERIMENT_ANALYSIS.md) | Deep dive into crash recovery and scalability boundaries. |
+| **Presentation** | [PRESENTATION_SLIDES.md](./PRESENTATION_SLIDES.md) | Structured technical slides for a deep-dive walkthrough. |
 
 ---
 
-## 🧪 Empirical Findings (The "Results")
+## 🛠️ Systems Engineering Insights
 
-Our experiments validated the following systems properties:
-1. **WAL Performance**: Write-Ahead Logging is **~4x faster** than traditional journaling. It's like writing a quick "To-Do" list instead of updating the whole book immediately.
-2. **Crash Resilience**: We "killed" the database in the middle of a save, and it recovered **100% of the data** perfectly.
-3. **Memory Limits**: We found that as the data gets massive, the system has to work harder to "swap" pages in and out of memory, which slows things down.
+### 1. The Write-Ahead Log (WAL)
+We analyzed `pagerWalFrames` (Line 63172 in `sqlite3.c`). Our experiments show that WAL is **~4x faster** than traditional journaling because it turns random disk writes into sequential appends.
+
+### 2. Atomic Commit Guarantee
+The Pager ensures durability by calling `sqlite3OsSync` (Line 63060) at critical path intervals. We simulated a system crash mid-write and verified that the `hasHotJournal` logic (Line 61794) successfully restored the database to a consistent state 100% of the time.
+
+### 3. Cache Management
+The system uses an LRU (Least Recently Used) cache. When memory pressure increases, `sqlite3PcacheFetchStress` (Line 62215) manages the eviction of pages to prevent system crashes, a process we validated through our high-volume scale tests.
 
 ---
 
-## 🛠️ How to Run Experiments
-
-1. **Performance Benchmark**:
-   ```bash
-   python EXPERIMENT_RUNNER.py
-   ```
-2. **Failure & Scale Simulations**:
-   ```bash
-   python EXPERIMENT_SKEW_AND_FAILURE.py
-   ```
-
-## 📖 Key Code References (sqlite3.c)
-
-- `sqlite3PagerGet` (Line 62386): The primary entry point for page acquisition.
-- `pagerWalFrames` (Line 63172): The core of the WAL commit path.
-- `syncJournal` (Line 63272): The critical synchronization point for Rollback journals.
-- `hasHotJournal` (Line 61794): The crash recovery detection logic.
+## 📝 Concept Mapping
+Detailed mapping of distributed systems concepts (Partitioning, Replication) to SQLite's single-node architecture can be found in **[CONCEPT_MAPPING.md](./CONCEPT_MAPPING.md)**.
 
 ---
 **Course**: Database Internals / Systems Engineering (DS614)  
-**Author**: Tanay Patel
+**Author**: Tanay Patel  
+**Source**: [sqlite3.c (v3.45.0)](./sqlite/sqlite-amalgamation-3450000/sqlite3.c)
