@@ -5,10 +5,17 @@ import os
 import subprocess
 import sys
 
+# Resolve absolute paths to the 'data' directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
 # Experiment Configuration
-DB_A = "scale_test.db"
-DB_B = "skew_test.db"
-DB_C = "crash_test.db"
+DB_A = os.path.join(DATA_DIR, "scale_test.db")
+DB_B = os.path.join(DATA_DIR, "skew_test.db")
+DB_C = os.path.join(DATA_DIR, "crash_test.db")
 
 def reset_db(db_path):
     for suffix in ["", "-wal", "-shm", "-journal"]:
@@ -39,7 +46,8 @@ def run_scale_test():
         results[size] = end - start
         conn.close()
     
-    with open("scale_results.json", "w") as f:
+    result_path = os.path.join(DATA_DIR, "scale_results.json")
+    with open(result_path, "w") as f:
         json.dump(results, f, indent=4)
     return results
 
@@ -80,7 +88,8 @@ def run_skew_test():
     results["skewed"] = end - start
     conn.close()
     
-    with open("skew_results.json", "w") as f:
+    result_path = os.path.join(DATA_DIR, "skew_results.json")
+    with open(result_path, "w") as f:
         json.dump(results, f, indent=4)
     return results
 
@@ -88,10 +97,10 @@ def run_crash_test():
     print("Running Experiment C: Crash/Corruption Simulation...")
     reset_db(DB_C)
     
-    worker_code = """
+    worker_code = f"""
 import sqlite3
 import os
-conn = sqlite3.connect('crash_test.db')
+conn = sqlite3.connect(r'{DB_C}')
 conn.execute('PRAGMA journal_mode = WAL')
 conn.execute('CREATE TABLE recovery (id INTEGER PRIMARY KEY)')
 for i in range(500):
@@ -100,10 +109,11 @@ for i in range(500):
     if i == 250:
         os._exit(1)
 """
-    with open("crash_worker.py", "w") as f:
+    worker_script = os.path.join(DATA_DIR, "crash_worker.py")
+    with open(worker_script, "w") as f:
         f.write(worker_code)
     
-    p = subprocess.Popen([sys.executable, "crash_worker.py"])
+    p = subprocess.Popen([sys.executable, worker_script])
     p.wait()
     
     # Verify recovery
@@ -120,11 +130,12 @@ for i in range(500):
         "status": "SUCCESS" if count == 251 else "FAILURE"
     }
     
-    with open("crash_results.json", "w") as f:
+    result_path = os.path.join(DATA_DIR, "crash_results.json")
+    with open(result_path, "w") as f:
         json.dump(findings, f, indent=4)
     conn.close()
-    if os.path.exists("crash_worker.py"):
-        os.remove("crash_worker.py")
+    if os.path.exists(worker_script):
+        os.remove(worker_script)
     return findings
 
 if __name__ == "__main__":

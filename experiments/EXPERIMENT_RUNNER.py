@@ -3,18 +3,24 @@ import time
 import json
 import os
 
-DB_NAME = "systems_experiment.db"
+# Resolve absolute paths to the 'data' directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+DB_NAME = os.path.join(DATA_DIR, "systems_experiment.db")
 ITERATIONS = 1000
 
 def reset_db():
-    if os.path.exists(DB_NAME):
-        os.remove(DB_NAME)
-    if os.path.exists(DB_NAME + "-wal"):
-        os.remove(DB_NAME + "-wal")
-    if os.path.exists(DB_NAME + "-shm"):
-        os.remove(DB_NAME + "-shm")
-    if os.path.exists(DB_NAME + "-journal"):
-        os.remove(DB_NAME + "-journal")
+    for suffix in ["", "-wal", "-shm", "-journal"]:
+        path = DB_NAME + suffix
+        if os.path.exists(path):
+            try:
+                os.remove(path)
+            except PermissionError:
+                pass
 
 def run_workload(mode):
     reset_db()
@@ -44,7 +50,8 @@ for mode in ["DELETE", "TRUNCATE", "WAL"]:
     print(f"Testing mode: {mode}...")
     results[mode] = run_workload(mode)
 
-with open("systems_results.json", "w") as f:
+result_path = os.path.join(DATA_DIR, "systems_results.json")
+with open(result_path, "w") as f:
     json.dump(results, f, indent=4)
 
 print("\nResults Summary:")

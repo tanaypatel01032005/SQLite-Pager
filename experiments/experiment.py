@@ -3,11 +3,21 @@ import time
 import json
 import os
 
-DB_NAME = "experiment.db"
+# Resolve absolute paths to the 'data' directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+DB_NAME = os.path.join(DATA_DIR, "experiment.db")
 
 def run_test(query_fn, setup_fn=None):
     if os.path.exists(DB_NAME):
-        os.remove(DB_NAME)
+        try:
+            os.remove(DB_NAME)
+        except PermissionError:
+            pass
     
     conn = sqlite3.connect(DB_NAME)
     if setup_fn:
@@ -71,7 +81,8 @@ for p_size in [1024, 4096, 16384]:
     t = run_test(heavy_write, setup_page)
     results["page_size_vs_perf"][p_size] = t
 
-with open("results.json", "w") as f:
+result_path = os.path.join(DATA_DIR, "results.json")
+with open(result_path, "w") as f:
     json.dump(results, f, indent=4)
 
-print("Experiment complete. Results saved to results.json")
+print(f"Experiment complete. Results saved to {result_path}")
