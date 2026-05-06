@@ -1,58 +1,143 @@
-# SQLite Pager Subsystem: Systems Engineering Deep Dive
+# 🛡️ SQLite Pager: Systems Engineering & Reverse Engineering Deep Dive
 
-A formal reverse-engineering and systems analysis of the core persistence engine within SQLite. This project bridges the gap between high-level database theory and low-level C implementation.
+## 🚀 Project Overview
+**SQLite Pager** is a formal systems engineering project focused on reverse-engineering the core persistence engine of SQLite. By analyzing the `sqlite3.c` amalgamation source code, this project exposes how SQLite guarantees **ACID** compliance (Atomicity, Consistency, Isolation, Durability) through page-level management, sophisticated caching, and multi-mode journaling.
 
----
+This repository serves as a complete technical submission, including code traces, state-machine models, empirical benchmarks, and crash-recovery simulations.
 
-## 📖 Project Concept: The "Librarian" Analogy
+## 🏗️ Architecture
+The Pager acts as the critical bridge between the high-level **B-Tree layer** and the low-level **OS/VFS layer**.
 
-To understand this project, imagine a library where books are frequently updated.
-- **The Pager is the Librarian**: Its job is to manage how pages are read from the shelf (Disk) and modified on the desk (Memory).
-- **The Safety Log**: Before any page is changed, the Librarian ensures a copy is kept. If the library loses power mid-write, the Librarian uses this log to restore the book to its last perfect state.
-- **Optimization**: This project analyzes how this "Librarian" handles thousands of requests per second while guaranteeing that not a single word is ever lost, even during a system crash.
+```text
+┌─────────────────────────────────────────────────────────────────────────┐
+│                          SQLite Pager Architecture                       │
+└─────────────────────────────────────────────────────────────────────────┘
 
----
+    ┌──────────────┐      ┌──────────────┐      ┌──────────────────┐
+    │    B-Tree    │      │    Pager     │      │   Disk / VFS     │
+    │    Layer     │─────▶│  Subsystem   │─────▶│   (db.sqlite3)   │
+    │(Logical Ops) │      │  (sqlite3.c) │      │ (Physical Pages) │
+    └──────────────┘      └──────────────┘      └──────────────────┘
+                                 │
+                 ┌───────────────┴───────────────┐
+                 ▼                               ▼
+    ┌────────────────────────┐      ┌────────────────────────┐
+    │   Page Cache (PCache)  │      │   Journaling Engine    │
+    │   (LRU Management)     │      │   (WAL vs. Rollback)   │
+    │                        │      │                        │
+    │  ┌──────────────────┐  │      │  ┌──────────────────┐  │
+    │  │  Dirty Pages     │  │      │  │  -wal file       │  │
+    │  │  Clean Pages     │  │      │  │  -journal file   │  │
+    │  └──────────────────┘  │      │  └──────────────────┘  │
+    └────────────────────────┘      └────────────────────────┘
+```
 
-## 🤖 Quick Start for AI & Automated Agents
+## 📁 Project Structure
+```text
+sqlite_pager_project/
+│
+├── sqlite/                       # Original Source Code
+│   └── sqlite-amalgamation/
+│       └── sqlite3.c             # Target of reverse engineering
+│
+├── Reports/                      # Formal Systems Documentation
+│   ├── SYSTEMS_ANALYSIS.md       # State model and data structures
+│   ├── CONCEPT_MAPPING.md       # Theoretical vs Implementation mapping
+│   └── FAILURE_ANALYSIS.md       # Analysis of edge cases & limitations
+│
+├── Traces/                       # Execution Path Analysis
+│   ├── EXECUTION_TRACE.md        # Function-level code mapping
+│   └── WRITE_EXECUTION_TRACE.md  # Deep dive into the Transactional Write path
+│
+├── Experiments/                  # Empirical Benchmarks
+│   ├── EXPERIMENT_RUNNER.py      # Core performance benchmark script
+│   ├── EXPERIMENT_SKEW_AND_FAILURE.py # Advanced failure/scale simulations
+│   ├── results.json             # Raw benchmark data
+│   └── systems_results.json      # Formal experiment findings
+│
+├── Presentation/                 # Project Delivery
+│   └── PRESENTATION_SLIDES.md    # 15-slide technical presentation outline
+│
+└── README.md                     # This project overview
+```
 
-If you are an AI agent or bot fetching this repository, follow these steps to validate the system:
+## 🧠 Core Components
 
-1. **Environment**: Ensure Python 3.x is installed.
-2. **Performance Benchmark**: Execute `python EXPERIMENT_RUNNER.py` to compare Rollback vs. WAL journaling modes. Results will be saved to `systems_results.json`.
-3. **Failure Simulation**: Execute `python EXPERIMENT_SKEW_AND_FAILURE.py` to run scale, skew, and crash-recovery tests. Results will be saved to `scale_results.json`, `skew_results.json`, and `crash_results.json`.
-4. **Analysis**: Read `SYSTEMS_ENGINEERING_REPORT.md` for the formal architectural model.
+### 1. The Pager State Machine (`struct Pager`)
+The Pager is modeled as a finite state machine that coordinates file locks with memory state.
+- **OPEN**: Initial state; file open but no locks.
+- **READER**: Shared lock held; can read pages into cache.
+- **WRITER_LOCKED**: Reserved lock held; preparing to modify pages.
+- **WRITER_CACHEMOD**: The "Active" state where the cache contains dirty (modified) pages.
+- **WRITER_DBMOD**: The "Commit" state where dirty pages are being flushed to the disk.
 
----
+### 2. Transactional Write Path
+We traced the lifecycle of an `UPDATE` operation:
+1. **Acquire Writable Page**: `sqlite3PagerWrite()` marks a page as dirty in the PCache.
+2. **Journaling**: `pagerAddPageToRollbackJournal()` ensures the original image is saved before modification.
+3. **Synchronization**: `sqlite3OsSync()` forces hardware buffers to flush.
+4. **Finalization**: `sqlite3PagerCommitPhaseOne/Two` coordinates the atomic swap of data.
 
-## 📂 Core Project Modules
+### 3. Write-Ahead Logging (WAL)
+Analysis of the modern concurrency model:
+- **Sequential Writes**: Changes are appended to a log via `pagerWalFrames` (Line 63172).
+- **Concurrency**: Allows readers to access the main DB while the writer appends to the log.
+- **Checkpoints**: The process of merging the log back into the main database.
 
-| Module | Documentation | Key Functionality |
+## 🧪 Experiments & Empirical Data
+
+### 1. WAL vs. Rollback Journaling
+**Workload**: 1000 individual transactions (Insert + Commit).
+| Mode | Performance | Analysis |
 | :--- | :--- | :--- |
-| **Architectural Report** | [SYSTEMS_ENGINEERING_REPORT.md](./SYSTEMS_ENGINEERING_REPORT.md) | State machine model, data structure mapping, and design logic. |
-| **Execution Tracing** | [WRITE_EXECUTION_TRACE.md](./WRITE_EXECUTION_TRACE.md) | Line-by-line code flow of a transactional write operation. |
-| **WAL Experiment** | [WAL_VS_ROLLBACK_EXPERIMENT.md](./WAL_VS_ROLLBACK_EXPERIMENT.md) | Empirical comparison of Write-Ahead Logging efficiency. |
-| **Failure Analysis** | [EXPERIMENT_ANALYSIS.md](./EXPERIMENT_ANALYSIS.md) | Deep dive into crash recovery and scalability boundaries. |
-| **Presentation** | [PRESENTATION_SLIDES.md](./PRESENTATION_SLIDES.md) | Structured technical slides for a deep-dive walkthrough. |
+| **Rollback (DELETE)** | 8.57s | Limited by synchronous journal headers. |
+| **WAL** | 2.16s | **~4x Faster**; leverages sequential I/O. |
+
+### 2. Crash Recovery Simulation
+**The "Kill" Test**: We forcefully terminated the process during a write operation.
+- **Findings**: The Pager successfully detected the `hot-journal` on restart and replayed the log to restore 100% data consistency.
+- **Code Ref**: `hasHotJournal` (Line 61794).
+
+### 3. Data Scaling & Cache Pressure
+**Workload**: Testing inserts from 100 to 100,000 rows.
+- **Observations**: Performance remains linear until the `cache_size` is exceeded, at which point `sqlite3PcacheFetchStress` (Line 62215) causes a latency spike due to page eviction.
+
+## 🛠️ Installation & Setup
+
+### Prerequisites
+- **Python**: 3.10+
+- **Compiler**: GCC/Clang (if rebuilding SQLite)
+- **Environment**: Windows/Linux/macOS
+
+### Running the Benchmarks
+```bash
+# 1. Initialize and run core performance tests
+python EXPERIMENT_RUNNER.py
+
+# 2. Run scale, skew, and crash simulations
+python EXPERIMENT_SKEW_AND_FAILURE.py
+```
+
+## 🌐 Project Deliverables
+- **[SYSTEMS_ENGINEERING_REPORT.md](./SYSTEMS_ENGINEERING_REPORT.md)**: The definitive audit-ready submission.
+- **[WRITE_EXECUTION_TRACE.md](./WRITE_EXECUTION_TRACE.md)**: Detailed step-by-step logic flow.
+- **[PRESENTATION_SLIDES.md](./PRESENTATION_SLIDES.md)**: Technical walkthrough outline.
+
+## 📚 Technologies Used
+- **C Language**: Core implementation analysis (`sqlite3.c`).
+- **Python**: Benchmarking and data visualization scripts.
+- **SQLite VFS**: Low-level OS interface exploration.
+- **Markdown**: Structured systems documentation.
+
+## 🎓 Learning Outcomes
+This project demonstrates:
+✅ **Source Code Reverse Engineering**: Deciphering the 200k+ lines of `sqlite3.c`.
+✅ **Concurrency Modeling**: Understanding WAL vs. Locking strategies.
+✅ **Durability Protocols**: Implementing and testing atomic commit logic.
+✅ **Performance Analysis**: Measuring the cost of `fsync()` and random I/O.
+✅ **Failure Engineering**: Simulating crashes to verify recovery robustness.
 
 ---
-
-## 🛠️ Systems Engineering Insights
-
-### 1. The Write-Ahead Log (WAL)
-We analyzed `pagerWalFrames` (Line 63172 in `sqlite3.c`). Our experiments show that WAL is **~4x faster** than traditional journaling because it turns random disk writes into sequential appends.
-
-### 2. Atomic Commit Guarantee
-The Pager ensures durability by calling `sqlite3OsSync` (Line 63060) at critical path intervals. We simulated a system crash mid-write and verified that the `hasHotJournal` logic (Line 61794) successfully restored the database to a consistent state 100% of the time.
-
-### 3. Cache Management
-The system uses an LRU (Least Recently Used) cache. When memory pressure increases, `sqlite3PcacheFetchStress` (Line 62215) manages the eviction of pages to prevent system crashes, a process we validated through our high-volume scale tests.
-
----
-
-## 📝 Concept Mapping
-Detailed mapping of distributed systems concepts (Partitioning, Replication) to SQLite's single-node architecture can be found in **[CONCEPT_MAPPING.md](./CONCEPT_MAPPING.md)**.
-
----
-**Course**: Database Internals / Systems Engineering (DS614)  
-**Author**: Tanay Patel  
-**Source**: [sqlite3.c (v3.45.0)](./sqlite/sqlite-amalgamation-3450000/sqlite3.c)
+**Course**: Database Systems / Systems Programming (DS614)  
+**Research Lead**: Tanay Patel  
+**Source Code Reference**: [Official SQLite Amalgamation](https://www.sqlite.org/amalgamation.html)
