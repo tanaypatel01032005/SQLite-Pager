@@ -1,16 +1,19 @@
-# SQLite Pager - Viva Preparation
+# SQLite Pager: Systems Engineering Viva Preparation
 
-### 1. Why WAL is better than Rollback Journaling?
-WAL allows multiple readers and one writer to work simultaneously by writing changes to a separate log file. Readers access the original database plus the log, while writers append to the log. This eliminates the "writer blocks all readers" bottleneck inherent in rollback journals.
+### 1. How does the Pager achieve higher concurrency in WAL mode?
+In traditional rollback journaling, the writer must acquire an `EXCLUSIVE` lock to modify the database, blocking all readers. In WAL mode, the Pager uses a shared-memory index (`-shm` file) to track snapshots. While a writer appends new frames via `pagerWalFrames()` (Line 63172), readers can concurrently access the main database file plus older committed frames in the WAL. This separation of the read-path from the write-path is a primary concurrency driver.
 
-### 2. Why use a page-based system?
-Databases are too large to fit in memory. Breaking the database into fixed-size pages (e.g., 4096 bytes) allows the Pager to load only what is needed. It also aligns with OS disk sectors, making I/O operations efficient and allowing for atomic block writes.
+### 2. Why must the B-tree call `sqlite3PagerWrite()` before modifying a page?
+The Pager follows the "Write-Ahead Logging" or "Rollback-First" principle. In rollback mode, `sqlite3PagerWrite()` (Line 62894) triggers `pager_write()`, which invokes `pagerAddPageToRollbackJournal()` (Line 62651). This copies the original "clean" data into the journal file *before* the B-tree can modify the memory buffer. This ensures that if the system crashes mid-write, the Pager has a consistent before-image to restore during recovery.
 
-### 3. Why is an LRU cache essential?
-Disk access is orders of magnitude slower than RAM. The LRU (Least Recently Used) cache keeps "hot" pages in memory. Since database access often exhibits temporal locality (recently used pages are likely to be used again), LRU maximizes hits and minimizes disk latency.
+### 3. What is the lifecycle of a "dirty" page within the Pcache?
+A page begins as **clean** when fetched via `sqlite3PcacheFetch()` (Line 62212). Once `sqlite3PagerWrite()` is called, it becomes **modified**. Upon the first modification in a transaction, it is **journaled**. After B-tree changes, it is marked **dirty**. During `sqlite3PagerCommitPhaseOne()`, it is **synced** to the log/journal. Finally, after the transaction finalizes (or during a checkpoint), it is **flushed** back to the main database and returns to a **clean** state.
 
-### 4. What breaks when the database scales to millions of rows?
-The B-tree depth increases, meaning more pages must be fetched for a single row lookup. If the cache is smaller than the active index/data pages, the system begins "thrashing," where every query results in multiple disk reads and evictions, causing performance to collapse.
+### 4. How does the Pager handle memory pressure (Cache Exhaustion)?
+If the Pcache is full and a new page is requested, the Pager enters `sqlite3PcacheFetchStress()` (Line 62215). It searches for an unpinned page to evict using an LRU-like policy. If the only available pages are dirty, the Pager may be forced to "spill" them to disk (journaling them first) to free up memory. This "spill" process is expensive and indicates the system has hit its memory-to-disk inflection point.
 
----
-**FINAL VIVA PREP READY**
+### 5. Why is the commit process split into two phases?
+Two-phase commit is a safety design. `sqlite3PagerCommitPhaseOne()` (Line 63125) handles the heavy lifting of ensuring data is durable on the physical platter (`sqlite3OsSync`). `sqlite3PagerCommitPhaseTwo()` (Line 63362) is the atomic "flip" that finalizes the transaction. If a crash occurs between the phases, the system remains safe because the rollback journal (Phase One) is still present and can revert the partially durable changes.
+
+### 6. What happens during "Checkpoint Starvation" in WAL mode?
+Checkpointing (transferring WAL frames to the database) requires an exclusive lock on the database file. If long-running read transactions (holding shared locks) continuously overlap, the Pager can never acquire the lock to checkpoint. This causes the WAL file to grow indefinitely (`pagerWalFrames` continues appending), potentially exhausting disk space and degrading read performance as the WAL-index becomes massive.

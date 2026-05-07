@@ -1,49 +1,49 @@
 {
     "experiment_1_journal_modes": {
         "DELETE": {
-            "time": 8.485577583312988,
+            "time": 8.459364414215088,
             "db_size": 28672
         },
         "TRUNCATE": {
-            "time": 9.875832557678223,
+            "time": 8.87372875213623,
             "db_size": 28672
         },
         "WAL": {
-            "time": 2.2441272735595703,
+            "time": 2.2682077884674072,
             "db_size": 28672
         }
     },
     "experiment_2_cache_size": {
         "10": {
-            "insert_time": 2.2598161697387695,
-            "read_time": 0.006729602813720703
+            "insert_time": 2.352482557296753,
+            "read_time": 0.007959842681884766
         },
         "100": {
-            "insert_time": 2.2892816066741943,
-            "read_time": 0.006295919418334961
+            "insert_time": 2.315608263015747,
+            "read_time": 0.0075168609619140625
         },
         "1000": {
-            "insert_time": 2.2944040298461914,
-            "read_time": 0.005197286605834961
+            "insert_time": 2.3092617988586426,
+            "read_time": 0.005437612533569336
         }
     },
     "experiment_3_batch_commits": {
         "individual": {
-            "time": 2.288647413253784,
+            "time": 2.3510501384735107,
             "db_size": 28672
         },
         "batch": {
-            "time": 0.006584882736206055,
+            "time": 0.00535893440246582,
             "db_size": 4096
         }
     },
     "experiment_4_concurrency": {
         "DELETE": {
-            "total_time": 8.917246103286743,
-            "lock_errors": 10
+            "total_time": 8.138508081436157,
+            "lock_errors": 6
         },
         "WAL": {
-            "total_time": 2.41052508354187,
+            "total_time": 2.416109323501587,
             "lock_errors": 1
         }
     }
