@@ -18,9 +18,10 @@ To understand this project, imagine a library where books are frequently updated
 If you are an AI agent or bot fetching this repository, follow these steps to validate the system:
 
 1. **Environment**: Ensure Python 3.x is installed.
-2. **Performance Benchmark**: Execute `python experiments/EXPERIMENT_RUNNER.py` to compare Rollback vs. WAL journaling modes. Results will be saved to `data/systems_results.json`.
+2. **Performance Benchmark**: Execute `python experiments/extended_experiment.py` to compare Rollback vs. WAL journaling modes, cache impacts, and concurrency. Results will be saved to `experiments/extended_results.json`.
 3. **Failure Simulation**: Execute `python experiments/EXPERIMENT_SKEW_AND_FAILURE.py` to run scale, skew, and crash-recovery tests. Results will be saved to `data/scale_results.json`, `data/skew_results.json`, and `data/crash_results.json`.
-4. **Analysis**: Read `docs/SYSTEMS_ENGINEERING_REPORT.md` for the formal architectural model.
+4. **Analysis**: Read `docs/EXPERIMENT_ANALYSIS.md` for the formal technical analysis of the Pager's performance and design.
+
 
 ---
 
@@ -31,16 +32,18 @@ If you are an AI agent or bot fetching this repository, follow these steps to va
 - **[CONCEPT_MAPPING.md](./docs/CONCEPT_MAPPING.md)**: Theoretical vs. Implementation mapping.
 - **[FAILURE_ANALYSIS.md](./docs/FAILURE_ANALYSIS.md)**: Analysis of edge cases and distributed systems context.
 - **[WAL_VS_ROLLBACK_EXPERIMENT.md](./docs/WAL_VS_ROLLBACK_EXPERIMENT.md)**: Detailed results of journaling efficiency tests.
-- **[EXPERIMENT_ANALYSIS.md](./docs/EXPERIMENT_ANALYSIS.md)**: Deep dive into crash recovery and scalability boundaries.
+- **[EXPERIMENT_ANALYSIS.md](./docs/EXPERIMENT_ANALYSIS.md)**: Empirical analysis of journaling, cache size, batching, and concurrency.
+
 
 ### 🔍 Execution Traces (`traces/`)
 - **[WRITE_EXECUTION_TRACE.md](./traces/WRITE_EXECUTION_TRACE.md)**: Line-by-line code flow of a transactional write operation.
 - **[EXECUTION_TRACE.md](./traces/EXECUTION_TRACE.md)**: High-level function mapping in `sqlite3.c`.
 
 ### 🧪 Experiments & Scripts (`experiments/`)
-- **[EXPERIMENT_RUNNER.py](./experiments/EXPERIMENT_RUNNER.py)**: Performance benchmark automation.
+- **[extended_experiment.py](./experiments/extended_experiment.py)**: Extended performance benchmark automation.
 - **[EXPERIMENT_SKEW_AND_FAILURE.py](./experiments/EXPERIMENT_SKEW_AND_FAILURE.py)**: Scale and failure simulation suite.
 - **[experiment.py](./experiments/experiment.py)**: Cache and page size performance explorer.
+
 
 ### 📊 Data & Results (`data/`)
 - All generated database files and `.json` result sets are stored here.

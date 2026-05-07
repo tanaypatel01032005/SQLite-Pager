@@ -1,0 +1,50 @@
+{
+    "experiment_1_journal_modes": {
+        "DELETE": {
+            "time": 8.485577583312988,
+            "db_size": 28672
+        },
+        "TRUNCATE": {
+            "time": 9.875832557678223,
+            "db_size": 28672
+        },
+        "WAL": {
+            "time": 2.2441272735595703,
+            "db_size": 28672
+        }
+    },
+    "experiment_2_cache_size": {
+        "10": {
+            "insert_time": 2.2598161697387695,
+            "read_time": 0.006729602813720703
+        },
+        "100": {
+            "insert_time": 2.2892816066741943,
+            "read_time": 0.006295919418334961
+        },
+        "1000": {
+            "insert_time": 2.2944040298461914,
+            "read_time": 0.005197286605834961
+        }
+    },
+    "experiment_3_batch_commits": {
+        "individual": {
+            "time": 2.288647413253784,
+            "db_size": 28672
+        },
+        "batch": {
+            "time": 0.006584882736206055,
+            "db_size": 4096
+        }
+    },
+    "experiment_4_concurrency": {
+        "DELETE": {
+            "total_time": 8.917246103286743,
+            "lock_errors": 10
+        },
+        "WAL": {
+            "total_time": 2.41052508354187,
+            "lock_errors": 1
+        }
+    }
+}

@@ -1,4 +1,7 @@
-﻿data/*.db
-data/*.db-wal
-data/*.db-shm
-data/*.db-journal
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.json
+!extended_results.json
+
