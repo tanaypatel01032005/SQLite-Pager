@@ -4,7 +4,14 @@ import json
 import os
 import threading
 
-DB_NAME = "systems_experiment.db"
+# Resolve absolute paths to the 'data' directory
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+DB_NAME = os.path.join(DATA_DIR, "systems_experiment.db")
 ITERATIONS = 1000
 
 def reset_db():
@@ -162,7 +169,8 @@ def main():
         "experiment_4_concurrency": exp4
     }
     
-    with open("extended_results.json", "w") as f:
+    result_path = os.path.join(DATA_DIR, "extended_results.json")
+    with open(result_path, "w") as f:
         json.dump(all_results, f, indent=4)
         
     print("\n" + "="*50)
@@ -186,7 +194,7 @@ def main():
         print(f"   - {mode:6}: Time {data['total_time']:.4f}s, Lock Errors: {data['lock_errors']}")
     
     print("="*50)
-    print("Results saved to extended_results.json")
+    print(f"Results saved to {result_path}")
 
 if __name__ == "__main__":
     main()

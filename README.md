@@ -18,35 +18,22 @@ To understand this project, imagine a library where books are frequently updated
 If you are an AI agent or bot fetching this repository, follow these steps to validate the system:
 
 1. **Environment**: Ensure Python 3.x is installed.
-2. **Performance Benchmark**: Execute `python experiments/extended_experiment.py` to compare Rollback vs. WAL journaling modes, cache impacts, and concurrency. Results will be saved to `experiments/extended_results.json`.
-3. **Failure Simulation**: Execute `python experiments/EXPERIMENT_SKEW_AND_FAILURE.py` to run scale, skew, and crash-recovery tests. Results will be saved to `data/scale_results.json`, `data/skew_results.json`, and `data/crash_results.json`.
+2. **Performance Benchmark**: Execute `python experiments/extended_experiment.py` to run the comprehensive 4-part experiment suite. Results save to `data/extended_results.json`.
+3. **Failure Simulation**: Execute `python experiments/EXPERIMENT_SKEW_AND_FAILURE.py` to run scale, skew, and crash-recovery tests. Results save to `data/scale_results.json`, `data/skew_results.json`, and `data/crash_results.json`.
 4. **Analysis**: Read `docs/EXPERIMENT_ANALYSIS.md` for the formal technical analysis of the Pager's performance and design.
-
 
 ---
 
-## 📂 Structured Project Modules
+## 📊 Experiment Results Summary
 
-### 📄 Documentation & Reports (`docs/`)
-- **[SYSTEMS_ENGINEERING_REPORT.md](./docs/SYSTEMS_ENGINEERING_REPORT.md)**: Formal architectural model and data structures.
-- **[CONCEPT_MAPPING.md](./docs/CONCEPT_MAPPING.md)**: Theoretical vs. Implementation mapping.
-- **[FAILURE_ANALYSIS.md](./docs/FAILURE_ANALYSIS.md)**: Analysis of edge cases and distributed systems context.
-- **[WAL_VS_ROLLBACK_EXPERIMENT.md](./docs/WAL_VS_ROLLBACK_EXPERIMENT.md)**: Detailed results of journaling efficiency tests.
-- **[EXPERIMENT_ANALYSIS.md](./docs/EXPERIMENT_ANALYSIS.md)**: Empirical analysis of journaling, cache size, batching, and concurrency.
-
-
-### 🔍 Execution Traces (`traces/`)
-- **[WRITE_EXECUTION_TRACE.md](./traces/WRITE_EXECUTION_TRACE.md)**: Line-by-line code flow of a transactional write operation.
-- **[EXECUTION_TRACE.md](./traces/EXECUTION_TRACE.md)**: High-level function mapping in `sqlite3.c`.
-
-### 🧪 Experiments & Scripts (`experiments/`)
-- **[extended_experiment.py](./experiments/extended_experiment.py)**: Extended performance benchmark automation.
-- **[EXPERIMENT_SKEW_AND_FAILURE.py](./experiments/EXPERIMENT_SKEW_AND_FAILURE.py)**: Scale and failure simulation suite.
-- **[experiment.py](./experiments/experiment.py)**: Cache and page size performance explorer.
-
-
-### 📊 Data & Results (`data/`)
-- All generated database files and `.json` result sets are stored here.
+| Experiment | Metric / Scenario | Results |
+| :--- | :--- | :--- |
+| **WAL vs Rollback** | 1000 individual inserts | DELETE 8.49s, TRUNCATE 9.88s, **WAL 2.24s** |
+| **Batch vs Individual** | 1000 inserts overhead | Individual 2.29s vs **Batch 0.007s** (347x faster) |
+| **Cache Size Impact** | Read time (1000 ops) | Cache=10: 0.0067s vs **Cache=1000: 0.0052s** |
+| **Concurrency** | 5 threads x 200 inserts | DELETE 8.92s (10 errors) vs **WAL 2.41s (1 error)** |
+| **Crash Recovery** | Recovery of 500 row txn | **251/251 rows recovered (100% success)** |
+| **Data Scale** | Insert latency growth | 100 rows: 0.008s → **100K rows: 0.247s** |
 
 ---
 
@@ -63,10 +50,29 @@ The system uses an LRU (Least Recently Used) cache. When memory pressure increas
 
 ---
 
-## 📽️ Presentation
-A 15-slide technical presentation outline for a deep-dive walkthrough is available in **[PRESENTATION_SLIDES.md](./docs/PRESENTATION_SLIDES.md)**.
+## 📂 Structured Project Modules
+
+### 📄 Documentation & Reports (`docs/`)
+- **[SYSTEMS_ENGINEERING_REPORT.md](./docs/SYSTEMS_ENGINEERING_REPORT.md)**: Formal deep-dive covering architecture and data structures.
+*   **[EXPERIMENT_ANALYSIS.md](./docs/EXPERIMENT_ANALYSIS.md)**: Main technical analysis of journaling, cache, batching, and concurrency.
+- **[CONCEPT_MAPPING.md](./docs/CONCEPT_MAPPING.md)**: Mapping of theoretical concepts to `sqlite3.c` code locations.
+- **[DESIGN_DECISIONS.md](./docs/DESIGN_DECISIONS.md)**: analysis of core architectural trade-offs.
+- **[FAILURE_ANALYSIS.md](./docs/FAILURE_ANALYSIS.md)**: Evaluation of system boundaries and failure modes.
+- **[SYSTEMS_ANALYSIS.md](./docs/SYSTEMS_ANALYSIS.md)**: High-level architectural overview.
+- **[PRESENTATION_SLIDES.md](./docs/PRESENTATION_SLIDES.md)**: 15-slide technical presentation outline.
+- **[VIVA_PREP.md](./docs/VIVA_PREP.md)**: Answers to core systems engineering viva questions.
+
+### 🧪 Experiments & Scripts (`experiments/`)
+- **[extended_experiment.py](./experiments/extended_experiment.py)**: Primary script running the comprehensive 4-part experiment suite.
+- **[EXPERIMENT_SKEW_AND_FAILURE.py](./experiments/EXPERIMENT_SKEW_AND_FAILURE.py)**: Scale, skew, and crash-recovery simulation suite.
+- **[experiment.py](./experiments/experiment.py)**: Secondary explorer for page size and cache comparisons.
+
+### 🔍 Execution Traces (`traces/`)
+- **[WRITE_EXECUTION_TRACE.md](./traces/WRITE_EXECUTION_TRACE.md)**: Detailed step-by-step write path trace.
+- **[EXECUTION_TRACE.md](./traces/EXECUTION_TRACE.md)**: High-level function mapping table.
 
 ---
+
 **Course**: Database Internals / Systems Engineering (DS614)  
 **Author**: Tanay Patel  
 **Source**: [sqlite3.c (v3.45.0)](./sqlite/sqlite-amalgamation-3450000/sqlite3.c)
