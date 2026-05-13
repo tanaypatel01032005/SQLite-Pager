@@ -12,7 +12,6 @@ We conducted a rigorous reverse-engineering study of the SQLite Pager (`pager.c`
 *   [Design Decisions](#design-decisions)
 *   [Concept Mapping](#concept-mapping)
 *   [The "Best 5" Experiments](#the-best-5-experiments)
-*   [Formal Systems Analysis](#formal-systems-analysis)
 *   [Setup & Reproducibility](#setup--reproducibility)
 *   [Failure Analysis](#failure-analysis)
 *   [Conclusion](#conclusion)
