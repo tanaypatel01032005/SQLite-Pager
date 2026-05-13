@@ -15,7 +15,6 @@ We analyzed the SQLite Pager's C source code, reverse-engineered its state machi
 *   [Formal Systems Analysis](#formal-systems-analysis)
 *   [Known Failure Cases](#known-failure-cases)
 *   [Conclusion](#conclusion)
-*   [Authors](#authors)
 
 ---
 
@@ -94,31 +93,31 @@ We conducted a reverse-engineering study of the original SQLite C source (Amalga
 
 ## 🧪 The "Best 5" Experiments
 
-### Experiment 1 — Journaling Throughput ($H_0$ Testing)
-**Why we did this**: To prove the efficiency of sequential logging vs. random overwriting.
-*   **Baseline**: DELETE Mode (Rollback Journaling).
-*   **Test**: WAL Mode (Write-Ahead Log).
-*   **Result**: WAL was **3.7x faster** (2.65s vs 9.96s) due to reduced disk-head movement.
+### EXP 1: Journaling Performance ($H_1$ Rejected)
+*   **Finding**: WAL mode is **3.7x faster** than traditional Rollback Journals.
+*   **Insight**: Sequential appends in WAL transform random-write latency into sequential-write throughput.
 
-### Experiment 2 — The Cache Inflection Point
-**Why we did this**: To identify the exact moment performance collapses due to memory pressure.
-*   **Test**: Sweep `cache_size` from 2 to 2000 pages.
-*   **Result**: Identified a "Knee of the Curve" where latency spikes by 500% once the cache can no longer hold the B-tree's internal nodes.
+![Journaling Throughput](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/journal_throughput.png)
 
-### Experiment 3 — Concurrency & Queuing Scaling
-**Why we did this**: To see if SQLite can handle modern multi-threaded workloads.
-*   **Test**: Mixed 80% Read / 20% Write with increasing thread counts (1 to 16).
-*   **Result**: Throughput peaks at 4-8 threads; beyond this, shared-memory index contention becomes the bottleneck.
+### EXP 2: Cache Inflection Point
+*   **Finding**: We quantitatively identified the "knee" in the curve where read latency spikes by 500% once the cache can no longer hold the B-tree's internal nodes.
 
-### Experiment 4 — Verified Crash Recovery
-**Why we did this**: To assert 100% durability in the face of process failure.
-*   **Test**: Hard kill at `i=500` during a commit.
-*   **Result**: `PRAGMA integrity_check` = `ok`. 501 rows recovered. No partial writes detected.
+![Cache Inflection](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/cache_inflection.png)
 
-### Experiment 5 — Write Amplification Factor (WAF)
-**Why we did this**: To quantify the "Hidden Cost" of durability on SSD hardware.
-*   **Test**: Measure physical bytes written vs. logical SQL bytes inserted.
-*   **Result**: DELETE Mode WAF = **170.4x**. WAL Mode WAF = **44.9x**. WAL is significantly healthier for SSD longevity.
+### EXP 3: Concurrency & Queuing Scaling
+*   **Finding**: Throughput peaks at 4-8 threads; beyond this, shared-memory index contention becomes the bottleneck.
+
+![Concurrency Scaling](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/concurrency_scaling.png)
+
+### EXP 4: Verified Crash Recovery
+*   **Finding**: `PRAGMA integrity_check` = `ok`. 501 rows recovered successfully. No partial writes detected.
+*   **Integrity Assurance**: 100% Recovery Success Rate.
+
+### EXP 5: Write Amplification Factor (WAF)
+*   **Finding**: DELETE mode WAF = **170.4x** | WAL mode WAF = **44.9x**.
+*   **Conclusion**: WAL significantly improves SSD longevity by reducing redundant page writes.
+
+![Write Amplification](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/write_amplification.png)
 
 ---
 
@@ -181,11 +180,8 @@ python experiments/generate_plots.py
 Streaming and storage systems like the SQLite Pager are not "black boxes." By applying reverse-engineering and rigorous instrumentation, we proved that:
 *   **Abstraction Integrity** (B-tree/Pager split) is the secret to SQLite's robustness.
 *   **Log-Structured Designs** (WAL) are essential for modern high-concurrency hardware.
-*   **Instrumentation** (like WAF tracking) reveals hidden costs that standard timing benchmarks miss.
 
 ---
 
-## 👤 Authors
-*   **Research Lead**: Tanay Patel
-*   **Course**: DS614 Database Internals / Systems Engineering
-*   **Assistant**: Antigravity AI (Google DeepMind)
+**Course**: DS614 Database Internals / Systems Engineering  
+**Research Lead**: Tanay Patel
