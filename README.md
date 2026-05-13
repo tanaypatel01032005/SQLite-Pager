@@ -60,7 +60,19 @@ sequenceDiagram
 The Pager exists to balance three conflicting system requirements:
 
 ---
+### 1. The I/O Constraint (Performance)
+*   **Problem**: Random disk I/O is 1,000x slower than RAM.
+*   **Pager Solution**: **Page Aligned I/O**. By grouping data into 4KB blocks that match OS sector sizes, the Pager ensures every disk read is perfectly optimized for the underlying hardware.
 
+### 2. The Memory Constraint (Scalability)
+*   **Problem**: Databases are often 100x larger than available RAM.
+*   **Pager Solution**: **LRU Eviction Policy**. The Pager uses the `pcache` module to keep only the "hottest" pages in memory, transparently swapping data in and out as needed without the B-tree layer's knowledge.
+
+### 3. The Consistency Constraint (Durability)
+*   **Problem**: A crash mid-write results in a "Torn Page" (half-new, half-old data).
+*   **Pager Solution**: **Atomic Commit Protocols**. Whether using Rollback Journals or WAL, the Pager ensures that no page is ever overwritten on disk until a safe copy exists elsewhere.
+
+---
 ## 📂 Project Structure
 ```text
 sqlite_pager_project/
@@ -82,19 +94,7 @@ sqlite_pager_project/
 ---
 
 
-### 1. The I/O Constraint (Performance)
-*   **Problem**: Random disk I/O is 1,000x slower than RAM.
-*   **Pager Solution**: **Page Aligned I/O**. By grouping data into 4KB blocks that match OS sector sizes, the Pager ensures every disk read is perfectly optimized for the underlying hardware.
 
-### 2. The Memory Constraint (Scalability)
-*   **Problem**: Databases are often 100x larger than available RAM.
-*   **Pager Solution**: **LRU Eviction Policy**. The Pager uses the `pcache` module to keep only the "hottest" pages in memory, transparently swapping data in and out as needed without the B-tree layer's knowledge.
-
-### 3. The Consistency Constraint (Durability)
-*   **Problem**: A crash mid-write results in a "Torn Page" (half-new, half-old data).
-*   **Pager Solution**: **Atomic Commit Protocols**. Whether using Rollback Journals or WAL, the Pager ensures that no page is ever overwritten on disk until a safe copy exists elsewhere.
-
----
 
 ## Key Internal Mechanisms
 To demonstrate technical depth, we mapped the following critical C-level functions in `sqlite3.c`:
@@ -198,6 +198,3 @@ This research project successfully reverse-engineered the SQLite Pager to prove 
 Our experiments confirm that transitioning from **Rollback to WAL architecture** is the single most effective optimization for modern SSD-based systems, offering a **3.9x speedup** while simultaneously **reducing hardware wear by 73.6%**.
 
 ---
-
-**Course**: DS614 Database Internals / Systems Engineering  
-**Research Lead**: Tanay Patel
