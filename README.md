@@ -4,9 +4,9 @@ We analyzed the SQLite Pager's C source code, reverse-engineered its state machi
 
 ---
 
-## 📑 Table of Contents
+## Table of Contents
 *   [What is the SQLite Pager?](#what-is-the-sqlite-pager)
-*   [Why a Pager? (The Abstraction Power)](#why-a-pager-the-abstraction-power)
+*   [Why a Pager?](#why-a-pager-the-abstraction-power)
 *   [Project Structure](#project-structure)
 *   [Key Source Components](#key-source-components)
 *   [System Requirements](#system-requirements)
@@ -18,7 +18,7 @@ We analyzed the SQLite Pager's C source code, reverse-engineered its state machi
 
 ---
 
-## 📖 What is the SQLite Pager?
+## What is the SQLite Pager?
 The **Pager Subsystem** (`pager.c`) is the central engine of SQLite. It is the "Librarian" that stands between the logical B-tree structures (the "Architect") and the physical Virtual File System (the "Foundation").
 
 *   It presents the database as a series of fixed-size **pages** (usually 4KB).
@@ -36,7 +36,7 @@ SQLite (and its Pager) is the most deployed database in the world:
 
 ---
 
-## 🏗️ Why a Pager? (The Abstraction Power)
+## Why a Pager? (The Abstraction Power)
 Modern applications need to store gigabytes of data but can only access a few kilobytes at a time. The Pager solves several critical architectural problems:
 
 ### Problem 1 — Random I/O is Expensive
@@ -57,7 +57,7 @@ Modern applications need to store gigabytes of data but can only access a few ki
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 ```text
 sqlite_pager_project/
 │
@@ -77,7 +77,7 @@ sqlite_pager_project/
 
 ---
 
-## 🔍 Key Source Components
+## Key Source Components
 We conducted a reverse-engineering study of the original SQLite C source (Amalgamation) to map these components:
 
 1.  **`sqlite3PagerGet()`** (Logical Abstraction)
@@ -91,7 +91,7 @@ We conducted a reverse-engineering study of the original SQLite C source (Amalga
 
 ---
 
-## 🧪 The "Best 5" Experiments
+## The "Best 5" Experiments
 
 ### EXP 1: Journaling Performance ($H_1$ Rejected)
 *   **Finding**: WAL mode is **3.7x faster** than traditional Rollback Journals.
@@ -117,11 +117,11 @@ We conducted a reverse-engineering study of the original SQLite C source (Amalga
 *   **Finding**: DELETE mode WAF = **170.4x** | WAL mode WAF = **44.9x**.
 *   **Conclusion**: WAL significantly improves SSD longevity by reducing redundant page writes.
 
-![Write Amplification](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/write_amplification.png)
+![Write Amplification](file:///C:/Users/tanay/.gemory/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/write_amplification.png)
 
 ---
 
-## 📐 Formal Systems Analysis
+## Formal Systems Analysis
 
 ### 1. State Machine Model
 The Pager maintains absolute consistency through a rigid transition table.
@@ -147,7 +147,7 @@ stateDiagram-v2
 
 ---
 
-## ⚠️ Known Failure Cases
+## Known Failure Cases
 These are real-world failure modes we identified through systems analysis:
 
 1.  **Cache Thrashing**
@@ -162,7 +162,17 @@ These are real-world failure modes we identified through systems analysis:
 
 ---
 
-## 🛠️ Setup & Reproducibility
+## System Requirements
+| Component | Requirement |
+| :--- | :--- |
+| **OS** | Windows 10/11, Ubuntu 22.04+, or macOS |
+| **Python** | 3.10+ |
+| **Libraries** | `matplotlib`, `seaborn`, `psutil`, `numpy` |
+| **Storage** | 100MB+ free space (for experimental databases) |
+
+---
+
+## Setup & Reproducibility
 ```bash
 # 1. Environment Setup
 pip install matplotlib seaborn psutil numpy
@@ -176,7 +186,7 @@ python experiments/generate_plots.py
 
 ---
 
-## 🏁 Conclusion
+## Conclusion
 Streaming and storage systems like the SQLite Pager are not "black boxes." By applying reverse-engineering and rigorous instrumentation, we proved that:
 *   **Abstraction Integrity** (B-tree/Pager split) is the secret to SQLite's robustness.
 *   **Log-Structured Designs** (WAL) are essential for modern high-concurrency hardware.
