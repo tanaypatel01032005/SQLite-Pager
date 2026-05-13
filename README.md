@@ -69,11 +69,12 @@ sqlite_pager_project/
 │   ├── masters_suite.py            ← ✏️ Core execution (5 Experiments)
 │   └── generate_plots.py           ← 📊 Visualization engine (Optional)
 │
-├── data/                           ← 📈 Results
-│   └── masters_results.json        ← Raw statistical data
+├── data/                           ← 📈 Results & Visualizations
+│   ├── masters_results.json        ← Raw statistical data
+│   └── plots/                      ← 🖼️ Generated experimental charts
 │
-├── sqlite/                         ← 🔍 Target Source Code (v3.50.4)
-│   └── sqlite3.c                   ← The original "System Under Test"
+├── sqlite/                         ← 🔍 Target Source Code (Amalgamation)
+│   └── sqlite-amalgamation-3.../   ← The original "System Under Test"
 │
 └── README.md                       ← 📑 Consolidated Documentation
 ```
