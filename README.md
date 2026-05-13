@@ -17,7 +17,7 @@ We conducted a rigorous reverse-engineering study of the SQLite Pager (`pager.c`
 ---
 
 ## What is the SQLite Pager?
-The **Pager Subsystem** is effectively the **Virtual Memory Manager** for the database. In a Master's-level context, it is the layer that implements **Persistence, Atomicity, and Isolation** by decoupling the logical B-tree requests from the physical OS filesystem.
+The **Pager Subsystem** is effectively the **Virtual Memory Manager** for the database. In a rigorous systems context, it is the layer that implements **Persistence, Atomicity, and Isolation** by decoupling the logical B-tree requests from the physical OS filesystem.
 
 It manages the database as a set of **Fixed-Size Pages** (default 4KB). Its primary job is to ensure that the B-tree layer (which manages data structure logic) never has to worry about disk offsets, file locking, or crash recovery.
 
@@ -59,6 +59,28 @@ sequenceDiagram
 ## Why a Pager? (The Triple-Constraint Model)
 The Pager exists to balance three conflicting system requirements:
 
+---
+
+## 📂 Project Structure
+```text
+sqlite_pager_project/
+│
+├── experiments/                    ← 🧪 Consolidated experimental suite
+│   ├── masters_suite.py            ← ✏️ Core execution (5 Experiments)
+│   └── generate_plots.py           ← 📊 Visualization engine (Optional)
+│
+├── data/                           ← 📈 Results
+│   └── masters_results.json        ← Raw statistical data
+│
+├── sqlite/                         ← 🔍 Target Source Code (v3.50.4)
+│   └── sqlite3.c                   ← The original "System Under Test"
+│
+└── README.md                       ← 📑 Consolidated Documentation
+```
+
+---
+
+
 ### 1. The I/O Constraint (Performance)
 *   **Problem**: Random disk I/O is 1,000x slower than RAM.
 *   **Pager Solution**: **Page Aligned I/O**. By grouping data into 4KB blocks that match OS sector sizes, the Pager ensures every disk read is perfectly optimized for the underlying hardware.
@@ -74,7 +96,7 @@ The Pager exists to balance three conflicting system requirements:
 ---
 
 ## Key Internal Mechanisms
-To demonstrate mastery, we mapped the following critical C-level functions:
+To demonstrate technical depth, we mapped the following critical C-level functions:
 
 *   **`sqlite3PagerGet()`**: Handles the acquisition of a page. It encapsulates the entire logic of cache lookups and disk I/O.
 *   **`sqlite3PagerWrite()`**: The most important function for ACID. It implements the **Write-Ahead Principle**—it will not allow the B-tree to modify a page in memory until it has successfully recorded a rollback image in the journal.
