@@ -97,17 +97,17 @@ We conducted a reverse-engineering study of the original SQLite C source (Amalga
 *   **Finding**: WAL mode is **3.7x faster** than traditional Rollback Journals.
 *   **Insight**: Sequential appends in WAL transform random-write latency into sequential-write throughput.
 
-![Journaling Throughput](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/journal_throughput.png)
+![Journaling Throughput](data/plots/journal_throughput.png)
 
 ### EXP 2: Cache Inflection Point
 *   **Finding**: We quantitatively identified the "knee" in the curve where read latency spikes by 500% once the cache can no longer hold the B-tree's internal nodes.
 
-![Cache Inflection](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/cache_inflection.png)
+![Cache Inflection](data/plots/cache_inflection.png)
 
 ### EXP 3: Concurrency & Queuing Scaling
 *   **Finding**: Throughput peaks at 4-8 threads; beyond this, shared-memory index contention becomes the bottleneck.
 
-![Concurrency Scaling](file:///C:/Users/tanay/.gemini/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/concurrency_scaling.png)
+![Concurrency Scaling](data/plots/concurrency_scaling.png)
 
 ### EXP 4: Verified Crash Recovery
 *   **Finding**: `PRAGMA integrity_check` = `ok`. 501 rows recovered successfully. No partial writes detected.
@@ -117,7 +117,7 @@ We conducted a reverse-engineering study of the original SQLite C source (Amalga
 *   **Finding**: DELETE mode WAF = **170.4x** | WAL mode WAF = **44.9x**.
 *   **Conclusion**: WAL significantly improves SSD longevity by reducing redundant page writes.
 
-![Write Amplification](file:///C:/Users/tanay/.gemory/antigravity/brain/9a81a13d-f322-4a07-83cc-b87ec654ac79/artifacts/plots/write_amplification.png)
+![Write Amplification](data/plots/write_amplification.png)
 
 ---
 
