@@ -11,21 +11,33 @@ The **Pager Subsystem** is the persistence engine of SQLite. It serves as the in
 
 ---
 
-## 2. State Machine Model
-The Pager operates as a finite state machine to ensure transaction integrity.
+## 2. Formal State Machine Model
+The Pager is modeled as a Mealy Machine where transitions are guarded by lock acquisitions and internal flags.
 
-| State | Description | Transition Trigger |
-| :--- | :--- | :--- |
-| **OPEN** | Pager is initialized but no locks are held. | `sqlite3PagerOpen()` |
-| **READER** | Shared lock held. Can read but not write. | `sqlite3PagerGet()` |
-| **WRITER_LOCKED** | Reserved lock held. Preparing to write. | `sqlite3PagerBegin()` |
-| **WRITER_CACHEMOD** | Pages modified in cache; journal open. | `sqlite3PagerWrite()` |
-| **WRITER_DBMOD** | Dirty pages being flushed to main database. | `sqlite3PagerCommitPhaseOne()` |
-| **ERROR** | Unrecoverable I/O or OOM error occurred. | Any failing I/O call |
+| Current State | Event (Input) | Guard (Condition) | Next State | Action (Output) |
+| :--- | :--- | :--- | :--- | :--- |
+| **OPEN** | `PagerGet` | Shared Lock OK | **READER** | Page loaded to PCache |
+| **READER** | `PagerBegin` | Reserved Lock OK | **WRITER_LOCKED** | Journal file created |
+| **WRITER_LOCKED** | `PagerWrite` | Page in PCache | **WRITER_CACHEMOD**| Before-image to Journal |
+| **WRITER_CACHEMOD**| `CommitPhase1`| Disk Sync OK | **WRITER_DBMOD** | Dirty pages flushed to DB|
+| **WRITER_DBMOD** | `CommitPhase2`| Header Update OK| **OPEN** | Journal deleted/reset |
+| **ANY** | `I/O Error` | - | **ERROR** | Transaction Rollback |
 
 ---
 
-## 3. Core Data Structures
+## 3. Complexity Analysis
+A masters-level analysis requires quantifying the computational cost of core pager operations.
+
+| Operation | Time Complexity | Space Complexity | Rationale |
+| :--- | :--- | :--- | :--- |
+| **Page Lookup** | $O(1)$ | $O(N)$ | PCache uses a hash table for $O(1)$ retrieval of pinned pages. |
+| **LRU Eviction** | $O(1)$ | $O(1)$ | PCache maintains a doubly-linked list for constant-time eviction. |
+| **WAL Search** | $O(1)$ | $O(W)$ | The `-shm` index allows constant-time mapping of `pgno` to WAL frame. |
+| **Checkpoint** | $O(W)$ | $O(1)$ | Must iterate through all $W$ frames in the WAL file to update main DB. |
+
+---
+
+## 4. Core Data Structures
 
 ### `struct Pager` (Line 57307)
 The central control object for a database connection.

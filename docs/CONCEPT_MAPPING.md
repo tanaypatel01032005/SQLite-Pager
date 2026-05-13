@@ -39,12 +39,11 @@ This document maps theoretical storage system concepts to their concrete impleme
 
 ---
 
-### Comparison with Distributed Systems (CAP Theorem)
-| Feature | SQLite Pager | Distributed DB (e.g., Spanner) |
-| :--- | :--- | :--- |
-| **Atomicity** | Single-file 2PC | Distributed Commit (Paxos/Raft) |
-| **Consistency** | Strong (Strict Serializability) | Tunable (Eventual to Strong) |
-| **Availability** | Low (Single-point of failure) | High (Multi-node replication) |
-| **Partitioning** | **None** (Single file) | **Sharding** (Across nodes) |
+### 8. The CAP Theorem in Local Persistence
+A common misconception is that CAP only applies to distributed systems. However, its principles explain SQLite's design trade-offs:
 
-**Architectural Insight**: The SQLite Pager prioritizes **Durability** and **Consistency** over **Availability** and **Partition Tolerance**. It is a "CA" system (Consistent and Available) only within the context of a single node's availability.
+*   **Consistency (C)**: SQLite prioritizes **Strict Serializability**. The Pager's state machine (e.g., `WRITER_LOCKED` to `WRITER_CACHEMOD`) ensures that no reader ever sees a partial transaction.
+*   **Availability (A)**: SQLite provides high availability for local processes. However, it lacks "High Availability" in the distributed sense; if the host machine fails, the database is unavailable.
+*   **Partition Tolerance (P)**: SQLite is **not Partition Tolerant**. In a networked filesystem (NFS/SMB), a "partition" (network drop) can leave lock-files orphaned, potentially leading to corruption or deadlocks. SQLite's designers explicitly warn against using it in environments where $P$ is a requirement.
+
+**Architectural Verdict**: SQLite is a **CA** system. It assumes a reliable local substrate and sacrifices horizontal scalability to guarantee absolute consistency.
