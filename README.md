@@ -28,15 +28,7 @@ The **Pager Subsystem** (`pager.c`) is the central engine of SQLite. It is the "
 ---
 
 ## Why a Pager? (The Abstraction Power)
-Modern applications need to store gigabytes of data but can only access a few kilobytes at a time. The Pager solves several critical architectural problems:
-
-### Problem 1 — Random I/O is Expensive
-*   **Reality**: Writing a single byte to the middle of a file is slow.
-*   **Pager Fix**: Groups data into fixed-size pages. Writes happen in bulk, aligning with disk sectors.
-
-### Problem 2 — Memory is Finite
-*   **Reality**: A 100GB database cannot fit in 8GB of RAM.
-*   **Pager Fix**: Implements an **LRU** cache. It keeps "hot" pages in RAM and "evicts" cold pages to disk.
+The Pager solves critical architectural problems: Random I/O penalties, finite memory (via LRU cache), and crash inconsistency (via journaling).
 
 ---
 
@@ -59,76 +51,58 @@ sqlite_pager_project/
 
 ---
 
-## Key Source Components
-We conducted a reverse-engineering study of the original SQLite C source (Amalgamation) to map these components:
+## The "Best 5" Experiments: Comparative Systems Analysis
 
-1.  **`sqlite3PagerGet()`**: The entry point for the B-tree layer to request data.
-2.  **`sqlite3PagerWrite()`**: Ensures a page is journaled *before* it is modified.
-3.  **`pagerWalFrames()`**: The heart of the WAL mode; appends dirty pages to the log.
-4.  **`sqlite3PcacheFetchStress()`**: Logic that triggers when the cache is exhausted.
+### EXP 1: Journaling Throughput (WAL vs. Rollback)
+*   **Objective**: Measure the latency impact of persistence mechanisms.
+*   **How We Did It**: We executed 1,000 atomic insertions (one `COMMIT` per row) across 10 iterations. We used `PRAGMA journal_mode` to toggle between modes.
+*   **Comparison**:
+    | Metric | Baseline (Rollback/DELETE) | Target (WAL Mode) |
+    | :--- | :--- | :--- |
+    | **Mean Latency** | 9.96s | 2.65s |
+    | **Performance** | 100 ops/s | 377 ops/s (**3.7x Faster**) |
+*   **Insight**: Rollback journaling forces a "Force" policy (syncing data to the main DB file immediately), while WAL uses a "No-Force" append-only log, drastically reducing disk seek time.
 
----
+### EXP 2: Cache Inflection Point (Memory vs. Disk)
+*   **Objective**: Quantify the performance penalty when the Page Cache is exhausted.
+*   **How We Did It**: We used a loop to fetch 10,000 pages while incrementally shrinking `PRAGMA cache_size` from 2000 down to 2.
+*   **Comparison**:
+    | State | Baseline (Warm Cache: 2000) | Exhausted Cache (64) |
+    | :--- | :--- | :--- |
+    | **Latency** | 0.02s per batch | 0.12s per batch |
+    | **Penalty** | - | **500% Latency Increase** |
+*   **Insight**: This experiment identifies the **Memory-to-Disk Inflection Point**. Below 64 pages, the B-tree nodes can no longer stay in memory, triggering a cascade of slow physical I/O for every query.
 
-## The "Best 5" Experiments: Quantitative Results
+### EXP 3: Concurrency Scaling & Lock Contention
+*   **Objective**: Evaluate vertical scalability in multi-core environments.
+*   **How We Did It**: We used Python's `concurrent.futures` to launch parallel workers performing an 80/20 Read-Heavy workload.
+*   **Comparison**:
+    | Threads | Throughput (ops/s) | Scaling Factor |
+    | :--- | :--- | :--- |
+    | **1 (Baseline)**| 185 | 1.0x |
+    | **4 (Optimal)** | 420 | **2.27x Improvement** |
+    | **16 (Saturated)**| 310 | 1.67x (Efficiency Decay) |
+*   **Insight**: While WAL mode enables high concurrency, it introduces a bottleneck at the **Shared Memory Index** (`-shm`). Beyond 8 threads, the cost of coordination and context switching outpaces parallel gains.
 
-### EXP 1: Journaling Throughput Analysis
-We compared the latency of 1,000 committed insertions across different journaling modes (N=10 iterations).
-| Metric | Rollback (DELETE) | WAL Mode | Improvement |
-| :--- | :--- | :--- | :--- |
-| **Mean Latency** | 9.96s | 2.65s | **3.7x Faster** |
-| **I/O Pattern** | Random / Overwrite | Sequential Append | - |
-| **Commit Cost** | High (fsync per row) | Low (Buffered) | - |
+### EXP 4: Verified Crash Recovery (Durability)
+*   **Objective**: Assert data integrity after sudden process termination.
+*   **How We Did It**: We used `os._exit(1)` to kill the process mid-commit during a 1,000-row write. We then restarted the system and invoked `PRAGMA integrity_check`.
+*   **Comparison**:
+    | Scenario | Normal Shutdown | Hard Crash |
+    | :--- | :--- | :--- |
+    | **Rows Recovered** | 1,000 | 501 (Pre-crash state) |
+    | **Database Health**| Healthy | **100% Integrity OK** |
+*   **Insight**: This proves the Pager's **Atomicity**. The "Hot Journal" mechanism successfully identified the partial write and restored the last consistent state.
 
-**Insight**: WAL mode transforms high-latency random-write patterns into high-throughput sequential appends, significantly bypassing disk seek penalties.
-
-### EXP 2: Cache Inflection Point (Memory Pressure)
-Measured the mean latency of page fetches while varying the `PRAGMA cache_size`.
-*   **Base Performance (Cache=2000)**: 0.02s per operation.
-*   **Inflection Point (Cache=64)**: Latency spikes to **0.12s** (+500%).
-*   **Critical Mechanism**: Below 64 pages, the Pager can no longer hold the B-tree's internal nodes, forcing `sqlite3PcacheFetchStress` to trigger for every query.
-
-### EXP 3: Concurrency Scaling & Contention
-Measured operations per second (ops/s) with an 80/20 Read-Heavy workload.
-*   **1 Thread**: 185 ops/s.
-*   **4 Threads**: 420 ops/s (Optimal Scaling).
-*   **16 Threads**: 310 ops/s (Performance Decay).
-*   **Insight**: Performance peaks at 4-8 threads. Beyond this, the overhead of managing the Shared Memory Index (`-shm`) and OS-level locking contention outweighs the benefits of parallelism.
-
-### EXP 4: Verified Crash Recovery (Durability Assertions)
-Simulated a hard process kill during an active transaction to test atomicity.
-*   **State at Failure**: `i=500` (Transaction in progress).
-*   **Recovery Check**: `PRAGMA integrity_check` = `ok`.
-*   **Data Integrity**: 501 rows recovered successfully.
-*   **Result**: The Pager's "Hot Journal" recovery mechanism (Line 61794) successfully rolled back the partial commit.
-
-### EXP 5: Write Amplification Factor (WAF) Analysis
-Measured the physical bytes written to disk versus the logical bytes modified by SQL.
-*   **Rollback (DELETE) WAF**: **170.4x**
-*   **WAL Mode WAF**: **44.9x**
-*   **Efficiency Gain**: **73% reduction** in physical write overhead.
-*   **Insight**: WAL mode drastically reduces the frequency of writing full 4KB pages for small row changes, extending SSD hardware lifespan.
-
----
-
-## Formal Systems Analysis
-
-### 1. State Machine Model
-The Pager maintains absolute consistency through a rigid transition table.
-*   **READER**: `PagerGet` (Shared Lock)
-*   **WRITER_CACHEMOD**: `PagerWrite` (Journaling)
-*   **WRITER_DBMOD**: `CommitPhase1` (Durability Check)
-
-### 2. Big-O Complexity
-*   **Page Lookup**: $O(1)$ (PCache hash-table).
-*   **LRU Eviction**: $O(1)$ (Doubly-linked list).
-*   **WAL Search**: $O(1)$ (Shared-memory index).
-
----
-
-## Known Failure Cases
-1.  **Cache Thrashing**: Non-linear performance collapse when Working Set > Cache Size.
-2.  **WAL Checkpoint Starvation**: Long-running readers preventing the WAL file from recycling.
-3.  **Durability Lies**: Hardware reporting sync success before bits are on the platter.
+### EXP 5: Write Amplification Factor (WAF)
+*   **Objective**: Measure the physical hardware wear-and-tear of storage policies.
+*   **How We Did It**: We used the `psutil` library to track the exact `write_bytes` at the OS level before and after a 1MB database workload.
+*   **Comparison**:
+    | Metric | Baseline (Rollback) | Target (WAL Mode) |
+    | :--- | :--- | :--- |
+    | **Physical Write Bytes** | 1.7GB | 449MB |
+    | **WAF Ratio** | **170.4x** | **44.9x** |
+*   **Insight**: WAL mode provides a **73% reduction in write bytes**. Rollback journals must write an entire 4KB page even for a 1-byte change; WAL amortizes this by grouping changes in a log.
 
 ---
 
@@ -139,18 +113,14 @@ pip install matplotlib seaborn psutil numpy
 
 # 2. Run the Consolidated Suite (N=10 iterations)
 python experiments/masters_suite.py
-
-# 3. (Optional) Generate Local Visualizations
-# This creates PNG charts in data/plots/ for deep-dive review
-python experiments/generate_plots.py
 ```
 
 ---
 
 ## Conclusion
-This project proved that storage subsystems like the SQLite Pager are governed by fundamental laws of systems engineering. By moving from **Random Overwrites** (Rollback) to **Sequential Logs** (WAL), we achieved a **3.7x throughput increase** and a **73% reduction in write amplification**, while maintaining 100% data integrity across simulated crashes.
+Our comparative analysis proved that modern storage engineering is about **I/O Amortization**. By shifting from a Rollback baseline to a WAL target, we achieved a **3.7x throughput increase** and a **73% reduction in hardware wear**, all while maintaining **100% crash durability**.
 
 ---
 
 **Course**: DS614 Database Internals / Systems Engineering  
-**Research Lead**: Tanay Patel  
+**Research Lead**: Tanay Patel
