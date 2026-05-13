@@ -9,6 +9,8 @@ We conducted a rigorous reverse-engineering study of the SQLite Pager (`pager.c`
 *   [The Query Execution Flow (How it Works)](#the-query-execution-flow-how-it-works)
 *   [Why a Pager? (The Triple-Constraint Model)](#why-a-pager-the-triple-constraint-model)
 *   [Key Internal Mechanisms](#key-internal-mechanisms)
+*   [Design Decisions](#design-decisions)
+*   [Concept Mapping](#concept-mapping)
 *   [The "Best 5" Experiments](#the-best-5-experiments)
 *   [Formal Systems Analysis](#formal-systems-analysis)
 *   [Setup & Reproducibility](#setup--reproducibility)
@@ -102,6 +104,37 @@ To demonstrate technical depth, we mapped the following critical C-level functio
 *   **`sqlite3PagerGet()`** (Line 62386): Handles the acquisition of a page. It encapsulates the entire logic of cache lookups and disk I/O.
 *   **`sqlite3PagerWrite()`** (Line 62894): The most important function for ACID. It implements the **Write-Ahead Principle**—it will not allow the B-tree to modify a page in memory until it has successfully recorded a rollback image in the journal.
 *   **`sqlite3PcacheFetchStress()`** (Line 54243): This function is the "Engine Alarm." It triggers only when the system is out of memory and must force a dirty page to disk to make room. Our **Experiment 2** was designed specifically to trigger this code path.
+
+---
+
+## Design Decisions
+
+### Decision 1: WAL over Rollback Journaling
+*   **Where in Code**: `sqlite3PagerWrite()` — `sqlite3.c` Line 62894
+*   **Problem it Solves**: Traditional Rollback journaling uses a "Force" policy — every commit requires a synchronous `fsync` to the main database file, making write latency proportional to disk seek time.
+*   **Tradeoff**: WAL eliminates forced syncs during commits (writing only to the log), but introduces the need for periodic **checkpointing** — merging the WAL log back into the main database. Long-running readers can block this checkpoint, causing the WAL file to grow indefinitely (**WAL Checkpoint Starvation**, proven in Failure Analysis).
+
+### Decision 2: LRU Page Cache (PCache)
+*   **Where in Code**: `sqlite3PcacheFetchStress()` — `sqlite3.c` Line 54243
+*   **Problem it Solves**: The entire database cannot fit in RAM. An LRU cache keeps the most recently accessed pages hot, trading memory space for reduced disk I/O on hot data.
+*   **Tradeoff**: When the working set exceeds the cache size, the system enters **cache thrashing** — evicting and re-fetching the same pages repeatedly. EXP 2 quantified this: a cache of 2 pages increased latency by **498%** compared to a warm cache of 2000 pages.
+
+### Decision 3: Fixed 4KB Page Size
+*   **Where in Code**: `SQLITE_DEFAULT_PAGE_SIZE` macro — `sqlite3.h`
+*   **Problem it Solves**: Raw byte-level disk access is inefficient. Aligning data to 4KB pages matches the OS sector size, maximizing disk throughput for every read and write operation.
+*   **Tradeoff**: A 1-byte data change requires writing an entire 4KB page to the journal. This is the root cause of the high **Write Amplification Factor (WAF)**. EXP 5 showed a WAF of **170.47x** in Rollback mode — 17MB of physical writes for 100KB of logical data.
+
+---
+
+## Concept Mapping
+
+| Course Concept | How the SQLite Pager Implements It | Experiment Evidence |
+| :--- | :--- | :--- |
+| **Storage — B-Tree** | The Pager is the exclusive persistence layer for SQLite's B-tree. Every B-tree node is a page managed, cached, and flushed by the Pager. | Architecture (Sequence Diagram) |
+| **Storage — Log-Structured (LSM/WAL)** | WAL mode is a log-structured append-only write path. Writes go to a sequential log first; the main file is updated lazily. This is the same principle as LSM-tree SSTables. | EXP 1: 3.9x throughput gain |
+| **Reliability & Fault Tolerance** | The Pager guarantees atomicity via Hot Journal recovery. On restart after a crash, the Pager detects and rolls back any partial commit using the journal file. | EXP 4: 100% integrity after hard crash |
+| **Partitioning** | The 4KB page model partitions the database into fixed-size units, enabling O(1) offset-based access (`offset = pgno × page_size`). This is a form of range-based physical partitioning. | EXP 2: Cache inflection analysis |
+| **Execution Serialization (FSM)** | The Pager enforces a strict Finite State Machine: `OPEN → READER → WRITER_LOCKED → WRITER_CACHEMOD → COMMIT`. No state can be skipped, preventing dirty reads and phantom writes. | Formal Systems Analysis (State Machine) |
 
 ---
 
