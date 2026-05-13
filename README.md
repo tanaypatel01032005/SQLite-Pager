@@ -47,14 +47,6 @@ Modern applications need to store gigabytes of data but can only access a few ki
 *   **Reality**: A 100GB database cannot fit in 8GB of RAM.
 *   **Pager Fix**: Implements an **LRU (Least Recently Used)** cache. It keeps "hot" pages in RAM and "evicts" cold pages to disk automatically.
 
-### Problem 3 — The Crash Inconsistency
-*   **Reality**: If power fails mid-write, the database file becomes corrupt.
-*   **Pager Fix**: Uses **Journaling (Rollback)** or **WAL (Write-Ahead Logging)** to ensure a transaction is either 100% finished or 100% undone.
-
-### Problem 4 — Concurrency Contention
-*   **Reality**: Multiple processes reading the same file can cause data races.
-*   **Pager Fix**: Implements a complex **Shared Memory Index** (in WAL mode) so readers don't block writers.
-
 ---
 
 ## Project Structure
@@ -97,27 +89,41 @@ We conducted a reverse-engineering study of the original SQLite C source (Amalga
 *   **Finding**: WAL mode is **3.7x faster** than traditional Rollback Journals.
 *   **Insight**: Sequential appends in WAL transform random-write latency into sequential-write throughput.
 
-![Journaling Throughput](data/plots/journal_throughput.png)
+<img src="data/plots/journal_throughput.png" width="600">
+
+> **Deep Dive Analysis**:  
+> In DELETE mode (Rollback), every commit forces a "stop-and-sync" operation to the main database file. In contrast, WAL mode appends transactions sequentially to a log. This experiment proves that sequential I/O patterns provide a multi-fold speedup over random access patterns, even on modern NVMe hardware.
 
 ### EXP 2: Cache Inflection Point
-*   **Finding**: We quantitatively identified the "knee" in the curve where read latency spikes by 500% once the cache can no longer hold the B-tree's internal nodes.
+*   **Finding**: We quantitatively identified the "knee" in the curve where read latency spikes significantly.
 
-![Cache Inflection](data/plots/cache_inflection.png)
+<img src="data/plots/cache_inflection.png" width="600">
+
+> **Deep Dive Analysis**:  
+> This plot reveals the **Memory-to-Disk Inflection Point**. When the `cache_size` is too small to hold the B-tree's internal nodes, the Pager is forced into a continuous cycle of page evictions (`sqlite3PcacheFetchStress`). The result is a non-linear performance collapse where each SQL query triggers multiple physical disk reads instead of memory lookups.
 
 ### EXP 3: Concurrency & Queuing Scaling
-*   **Finding**: Throughput peaks at 4-8 threads; beyond this, shared-memory index contention becomes the bottleneck.
+*   **Finding**: Throughput peaks at 4-8 threads; beyond this, coordination overhead becomes the bottleneck.
 
-![Concurrency Scaling](data/plots/concurrency_scaling.png)
+<img src="data/plots/concurrency_scaling.png" width="600">
+
+> **Deep Dive Analysis**:  
+> While WAL mode enables readers to proceed without blocking writers, there is still a cost to **Shared Memory Management** (`-shm` file). As thread counts increase, the contention for the WAL index and the overhead of OS-level context switching begins to outpace the gains of parallel processing.
 
 ### EXP 4: Verified Crash Recovery
-*   **Finding**: `PRAGMA integrity_check` = `ok`. 501 rows recovered successfully. No partial writes detected.
+*   **Finding**: `PRAGMA integrity_check` = `ok`. 501 rows recovered successfully.
 *   **Integrity Assurance**: 100% Recovery Success Rate.
 
-### EXP 5: Write Amplification Factor (WAF)
-*   **Finding**: DELETE mode WAF = **170.4x** | WAL mode WAF = **44.9x**.
-*   **Conclusion**: WAL significantly improves SSD longevity by reducing redundant page writes.
+> **Deep Dive Analysis**:  
+> This experiment asserts the **Atomicity** of the Pager. By simulating a process kill mid-transaction, we verified that the Pager's recovery logic correctly identifies the "Hot Journal" and rolls back partial changes, ensuring zero data corruption.
 
-![Write Amplification](data/plots/write_amplification.png)
+### EXP 5: Write Amplification Factor (WAF)
+*   **Finding**: WAL mode reduces physical write overhead by nearly **75%**.
+
+<img src="data/plots/write_amplification.png" width="600">
+
+> **Deep Dive Analysis**:  
+> Write Amplification is the ratio of bytes written to disk vs. bytes requested by the application. In Rollback mode, a single-byte change requires an entire 4KB page to be written to the journal AND the database. WAL mode amortizes this cost by grouping changes into a sequential log, significantly reducing the "wear" on SSD flash cells.
 
 ---
 
@@ -148,17 +154,9 @@ stateDiagram-v2
 ---
 
 ## Known Failure Cases
-These are real-world failure modes we identified through systems analysis:
-
-1.  **Cache Thrashing**
-    *   **Scenario**: Database > RAM + Small `cache_size`.
-    *   **Impact**: Constant page evictions trigger massive write amplification.
-2.  **WAL Checkpoint Starvation**
-    *   **Scenario**: Overlapping long-running readers.
-    *   **Impact**: WAL file grows indefinitely, leading to disk exhaustion and slow reads.
-3.  **Durability (fsync) Lies**
-    *   **Scenario**: Consumer SSDs reporting success before data is on disk.
-    *   **Impact**: Power loss results in corrupted journals and unrecoverable data.
+1.  **Cache Thrashing**: Database > RAM + Small `cache_size`.
+2.  **WAL Checkpoint Starvation**: Overlapping long-running readers preventing WAL commits.
+3.  **Durability (fsync) Lies**: Hardware reporting success before persistence.
 
 ---
 
@@ -168,7 +166,6 @@ These are real-world failure modes we identified through systems analysis:
 | **OS** | Windows 10/11, Ubuntu 22.04+, or macOS |
 | **Python** | 3.10+ |
 | **Libraries** | `matplotlib`, `seaborn`, `psutil`, `numpy` |
-| **Storage** | 100MB+ free space (for experimental databases) |
 
 ---
 
@@ -187,9 +184,7 @@ python experiments/generate_plots.py
 ---
 
 ## Conclusion
-Streaming and storage systems like the SQLite Pager are not "black boxes." By applying reverse-engineering and rigorous instrumentation, we proved that:
-*   **Abstraction Integrity** (B-tree/Pager split) is the secret to SQLite's robustness.
-*   **Log-Structured Designs** (WAL) are essential for modern high-concurrency hardware.
+Streaming and storage systems like the SQLite Pager are not "black boxes." By applying reverse-engineering and rigorous instrumentation, we proved that **Abstraction Integrity** and **Log-Structured Designs** are essential for modern high-performance hardware.
 
 ---
 
