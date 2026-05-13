@@ -45,7 +45,8 @@ Modern applications need to store gigabytes of data but can only access a few ki
 sqlite_pager_project/
 │
 ├── experiments/                    ← 🧪 Consolidated masters-level suite
-│   └── masters_suite.py            ← ✏️ Core execution (5 Experiments)
+│   ├── masters_suite.py            ← ✏️ Core execution (5 Experiments)
+│   └── generate_plots.py           ← 📊 Visualization engine (Optional)
 │
 ├── data/                           ← 📈 Results
 │   └── masters_results.json        ← Raw statistical data
@@ -138,6 +139,10 @@ pip install matplotlib seaborn psutil numpy
 
 # 2. Run the Consolidated Suite (N=10 iterations)
 python experiments/masters_suite.py
+
+# 3. (Optional) Generate Local Visualizations
+# This creates PNG charts in data/plots/ for deep-dive review
+python experiments/generate_plots.py
 ```
 
 ---
