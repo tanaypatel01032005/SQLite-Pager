@@ -1,9 +1,8 @@
 # SQLite Pager Subsystem: Formal Systems Analysis & Evaluation
 [![Masters Level](https://img.shields.io/badge/Academic%20Bar-Masters%20Level-blue.svg)](#)
 [![SQLite Version](https://img.shields.io/badge/SQLite-v3.50.4-green.svg)](#)
-[![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)](#)
 
-A rigorous, reverse-engineering study of the SQLite Pager (`pager.c`), exploring the intersection of page-based storage, Write-Ahead Logging (WAL), and concurrent state management. This project elevates standard database benchmarking to a **systems-engineering thesis standard**.
+A rigorous, reverse-engineering study of the SQLite Pager (`pager.c`), exploring the intersection of page-based storage, Write-Ahead Logging (WAL), and concurrent state management. This project is a **consolidated systems-engineering thesis**, backing theoretical analysis with empirical proof.
 
 ---
 
@@ -44,73 +43,82 @@ stateDiagram-v2
     ERROR --> [*]
 ```
 
+### 3. Big-O Complexity Analysis
+| Operation | Time Complexity | Rationale |
+| :--- | :--- | :--- |
+| **Page Lookup** | $O(1)$ | PCache uses a hash table for pinned pages. |
+| **LRU Eviction** | $O(1)$ | PCache maintains a doubly-linked list for constant-time eviction. |
+| **WAL Search** | $O(1)$ | The `-shm` index maps `pgno` to WAL frame instantly. |
+| **Checkpoint** | $O(W)$ | Iterates through $W$ frames to update main DB. |
+
 ---
 
-## 🧪 Experimental Rigor
-Unlike generic benchmarks, this project uses a **Hypothesis-Driven Methodology** with 10+ iterations per test to ensure 95% Confidence Intervals.
+## 📐 Design Tradeoffs
 
-### The "Masters Suite" Setup
-| Component | Specification |
-| :--- | :--- |
-| **Testbed** | Windows 10 (Build 26200) |
-| **CPU** | Intel64 Family 6 Model 142 Stepping 12 |
-| **I/O Tracking** | `psutil` Hardware-level Write Byte Counters |
-| **Statistical Model** | Null Hypothesis ($H_0$) testing for latency distribution |
+### 1. Page-based Storage vs. Byte-streams
+*   **Decision**: SQLite abstracts the file into 4096-byte pages.
+*   **Tradeoff**: Simplifies cache management and aligns with OS disk sectors, but introduces **internal fragmentation** if records are small.
+
+### 2. WAL vs. Rollback Journals
+*   **Decision**: WAL mode (v3.7.0+) appends to a log instead of overwriting the database.
+*   **Tradeoff**: Enables **Reader-Writer Concurrency** (Readers don't block writers) but requires a shared-memory index (`-shm`) and background checkpointing.
+
+---
+
+## ⚠️ Failure Analysis & Mitigation
+
+### 1. Cache Thrashing
+*   **Mechanism**: When working set > `cache_size`, the Pager invokes `sqlite3PcacheFetchStress()`.
+*   **Impact**: Performance collapses as the system transitions from sub-millisecond memory latency to 10ms disk latency.
+*   **Mitigation**: Tuning `cache_size` to cover the B-tree's internal nodes.
+
+### 2. WAL Checkpoint Starvation
+*   **Mechanism**: Overlapping read transactions prevent the Pager from acquiring the `EXCLUSIVE` lock needed to checkpoint.
+*   **Impact**: The WAL file grows indefinitely, exhausting disk space and degrading read performance.
+
+### 3. Durability (fsync) Lies
+*   **Mechanism**: The Pager relies on `sqlite3OsSync()`. Many consumer SSDs lie about success to inflate benchmarks.
+*   **Impact**: Power loss can leave the Pager in an inconsistent state if the hardware reports success before the bits are on the platter.
 
 ---
 
 ## 🔍 Core Experimental Analysis
 
 ### EXP 1: Journaling Performance ($H_1$ Rejected)
-*   **Finding**: WAL mode is **3.7x faster** than traditional Rollback Journals.
-*   **Insight**: Sequential appends in WAL transform random-write latency into sequential-write throughput.
+*   **Result**: WAL mode is **3.7x faster** than DELETE mode (2.65s vs 9.96s).
+*   **Mechanism**: Sequential appends transform random-write latency into sequential throughput.
 
-### EXP 2: Cache Inflection Point
-*   **Finding**: We quantitatively identified the "knee" in the curve where read latency spikes due to PCache thrashing.
-*   **Recommendation**: Practitioners should size `PRAGMA cache_size` to cover the "hot" interior nodes of the B-tree.
+### EXP 2: Write Amplification Factor (WAF)
+*   **Result**: DELETE mode WAF = **170.4x** | WAL mode WAF = **44.9x**.
+*   **Conclusion**: WAL significantly improves SSD longevity by reducing redundant page writes.
 
-### EXP 3: Write Amplification Factor (WAF)
-*   **Finding**: DELETE mode produces **170.4x** write amplification, whereas WAL reduces this to **44.9x**.
-*   **Conclusion**: WAL is not just faster; it is significantly healthier for SSD longevity.
-
----
-
-## 📂 Project Hierarchy
-
-### 📑 Comprehensive Documentation
-- **[SYSTEMS_ENGINEERING_REPORT.md](./docs/SYSTEMS_ENGINEERING_REPORT.md)**: The Primary Master Report (Thesis Standard).
-- **[RELATED_WORK.md](./docs/RELATED_WORK.md)**: Theoretical comparison with ARIES and LSM-Trees.
-- **[SYSTEMS_ANALYSIS.md](./docs/SYSTEMS_ANALYSIS.md)**: Formal Big-O and FSM breakdown.
-- **[CONCEPT_MAPPING.md](./docs/CONCEPT_MAPPING.md)**: Rigorous CAP Theorem analysis.
-
-### 🛠️ Reproducibility Suite
-- **[masters_suite.py](./experiments/masters_suite.py)**: Consolidated experimental logic.
-- **[generate_plots.py](./experiments/generate_plots.py)**: Professional visualization engine.
+### EXP 3: Verified Crash Recovery
+*   **Result**: Simulated hard crash at `i=500` followed by restart.
+*   **Integrity**: `PRAGMA integrity_check` = `ok`. 501 rows recovered successfully.
 
 ---
 
-## 🛠️ Research Methodology: Non-Invasive Instrumentation
-
-To satisfy the **Master's bar for reverse engineering**, we distinguish between the **Original System** and our **Analytical Layer**:
-
-### 1. The Original Pager (System Under Test)
-We use the **SQLite v3.50.4 Amalgamation** (`sqlite3.c`) in its vanilla state. We do NOT modify the C source code; instead, we treat it as a "black box" and analyze its behavior via:
-*   **Static Analysis**: Tracing functions like `sqlite3PagerWrite()` and `pagerWalFrames()` (see [SYSTEMS_ANALYSIS.md](./docs/SYSTEMS_ANALYSIS.md)).
-*   **Formal Modeling**: Reverse-engineering the internal state transitions into a formal FSM.
-
-### 2. Experimental "Changes" (Instrumentation)
-Our experiments "change" the Pager's behavior using **Standard Configuration Interfaces** to observe its limits:
-*   **PRAGMA Injection**: We toggle `journal_mode` and `cache_size` to force the Pager into different execution paths (e.g., forcing `sqlite3PcacheFetchStress` by shrinking the cache).
-*   **External Instrumentation**: We use `psutil` and `os._exit()` to observe metrics that the Pager doesn't natively expose, such as **Write Amplification** and **Hot Journal recovery accuracy**.
-
-### 3. Comparable Results
-All findings are presented as **Differential Analysis**:
-*   **Baseline**: Standard Rollback mode (the "Base Version").
-*   **Target**: High-performance WAL mode.
-*   **Delta**: The measured engineering improvement (e.g., "73% reduction in write bytes").
+## 🎓 Related Work: SQLite vs. ARIES
+*   **ARIES**: The standard "Steal/No-Force" policy allows uncommitted data on disk.
+*   **SQLite Rollback**: A "No-Steal/Force" approach. Never writes uncommitted data to the main file.
+*   **The WAL Bridge**: SQLite's WAL mode acts as a hybrid, gaining the sequential-write benefits of ARIES while keeping the single-file simplicity of SQLite.
 
 ---
 
+## ❓ Technical FAQ (Viva Preparation)
+
+**Q: Why must the B-tree call `sqlite3PagerWrite()` before modification?**  
+A: To satisfy the **Write-Ahead Principle**. In rollback mode, this copies the "clean" page into the journal *before* the buffer is dirtied, ensuring a safe restore point.
+
+**Q: What happens during "Pcache Stress"?**  
+A: The Pager is forced to find an unpinned page to evict. If only dirty pages are available, it must "spill" them to disk (journaling them first), which indicates a critical memory-to-disk inflection point.
+
+**Q: Why is the commit split into two phases?**  
+A: Phase One ensures durability (physically on disk). Phase Two is the atomic "flip" that finalizes the transaction. A crash between phases is safe because the journal is still present to revert changes.
+
+---
+
+## 🛠️ Execution & Reproducibility
 ```bash
 # 1. Install dependencies
 pip install matplotlib seaborn psutil numpy
@@ -122,8 +130,5 @@ python experiments/masters_suite.py
 python experiments/generate_plots.py
 ```
 
----
-
-**Course**: Database Internals / Systems Engineering (DS614)  
 **Research Lead**: Tanay Patel  
-**Assistant**: Antigravity AI  
+**Course**: DS614 Database Internals  
