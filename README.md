@@ -161,10 +161,34 @@ To demonstrate technical depth, we mapped the following critical C-level functio
 ---
 
 ## Setup & Reproducibility
-We have automated the environment detection and experimental execution.
-1.  **Hardware Detection**: The suite automatically logs your CPU, RAM, and SQLite version.
-2.  **Statistically Rigorous Suite**: Run `python experiments/masters_suite.py`. It executes 10 iterations per test to calculate 95% Confidence Intervals.
-3.  **Visualization**: Run `python experiments/generate_plots.py` to recreate the statistical charts from the raw JSON data.
+The experimental environment is designed to be self-contained and verifiable on any Windows or Unix-based system.
+
+### Phase 1: Environment Preparation
+To ensure data isolation and dependency management, follow these steps:
+```bash
+# Clone the repository
+git clone https://github.com/tanaypatel01032005/SQLite-Pager.git
+cd SQLite-Pager
+
+# Install systems-level tracking dependencies
+pip install matplotlib seaborn psutil numpy
+```
+
+### Phase 2: Automated Benchmark Execution
+The `masters_suite.py` script is the core execution engine. It handles:
+*   **Hardware-Aware Logging**: Automatically detects CPU architecture, available RAM, and SQLite version to provide context for the results.
+*   **Statistical Rigor**: Each experiment is executed for **10 iterations** to calculate mean values and 95% Confidence Intervals, eliminating noise from background OS processes.
+```bash
+python experiments/masters_suite.py
+```
+*Output: Raw data is saved to `data/masters_results.json`.*
+
+### Phase 3: Post-Processing & Visualization
+To transform the raw JSON data into professional-grade charts:
+```bash
+python experiments/generate_plots.py
+```
+*Output: High-quality PNG charts are generated in `data/plots/`.*
 
 ---
 
