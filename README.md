@@ -113,19 +113,19 @@ To demonstrate technical depth, we mapped the following critical C-level functio
 *   **Comparison**:
     | Metric | Baseline (Rollback/DELETE) | Target (WAL Mode) |
     | :--- | :--- | :--- |
-    | **Mean Latency** | 9.96s | 2.65s |
-    | **Performance** | 100 ops/s | 377 ops/s (**3.7x Faster**) |
+    | **Mean Latency** | 10.99s | 2.79s |
+    | **Performance** | 90.9 ops/s | 357.1 ops/s (**3.9x Faster**) |
 *   **Insight**: Rollback journaling forces a "Force" policy (syncing data to the main DB file immediately), while WAL uses a "No-Force" append-only log, drastically reducing disk seek time.
 
 ### EXP 2: Cache Inflection Point (Memory vs. Disk)
 *   **Objective**: Quantify the performance penalty when the Page Cache is exhausted.
 *   **How We Did It**: We used a loop to fetch 10,000 pages while incrementally shrinking `PRAGMA cache_size` from 2000 down to 2.
 *   **Comparison**:
-    | State | Baseline (Warm Cache: 2000) | Exhausted Cache (64) |
+    | State | Baseline (Warm Cache: 2000) | Exhausted Cache (2) |
     | :--- | :--- | :--- |
-    | **Latency** | 0.02s per batch | 0.12s per batch |
-    | **Penalty** | - | **500% Latency Increase** |
-*   **Insight**: This experiment identifies the **Memory-to-Disk Inflection Point**. Below 64 pages, the B-tree nodes can no longer stay in memory, triggering a cascade of slow physical I/O for every query.
+    | **Latency** | 19.9 μs | 99.3 μs |
+    | **Penalty** | - | **498% Latency Increase** |
+*   **Insight**: This experiment identifies the **Memory-to-Disk Inflection Point**. Below 2 pages, the B-tree nodes can no longer stay in memory, triggering a cascade of slow physical I/O for every query.
 
 ### EXP 3: Concurrency Scaling & Lock Contention
 *   **Objective**: Evaluate vertical scalability in multi-core environments.
@@ -133,10 +133,10 @@ To demonstrate technical depth, we mapped the following critical C-level functio
 *   **Comparison**:
     | Threads | Throughput (ops/s) | Scaling Factor |
     | :--- | :--- | :--- |
-    | **1 (Baseline)**| 185 | 1.0x |
-    | **4 (Optimal)** | 420 | **2.27x Improvement** |
-    | **16 (Saturated)**| 310 | 1.67x (Efficiency Decay) |
-*   **Insight**: While WAL mode enables high concurrency, it introduces a bottleneck at the **Shared Memory Index** (`-shm`). Beyond 8 threads, the cost of coordination and context switching outpaces parallel gains.
+    | **1 (Baseline)**| 1490.2 | 1.0x |
+    | **2 (Optimal)** | 1567.4 | **1.05x Improvement** |
+    | **16 (Saturated)**| 1241.6 | 0.83x (Efficiency Decay) |
+*   **Insight**: While WAL mode enables high concurrency, it introduces a bottleneck at the **Shared Memory Index** (`-shm`). Beyond 2 threads on this hardware, the cost of coordination and context switching outpaces parallel gains.
 
 ### EXP 4: Verified Crash Recovery (Durability)
 *   **Objective**: Assert data integrity after sudden process termination.
@@ -154,9 +154,9 @@ To demonstrate technical depth, we mapped the following critical C-level functio
 *   **Comparison**:
     | Metric | Baseline (Rollback) | Target (WAL Mode) |
     | :--- | :--- | :--- |
-    | **Physical Write Bytes** | 1.7GB | 449MB |
-    | **WAF Ratio** | **170.4x** | **44.9x** |
-*   **Insight**: WAL mode provides a **73% reduction in write bytes**. Rollback journals must write an entire 4KB page even for a 1-byte change; WAL amortizes this by grouping changes in a log.
+    | **WAF Ratio** | **170.47x** | **44.94x** |
+    | **Total Write** | 17.0 MB | 4.4 MB |
+*   **Insight**: WAL mode provides a **73.6% reduction in write bytes**. Rollback journals must write an entire 4KB page even for a 1-byte change; WAL amortizes this by grouping changes in a log.
 
 ---
 
@@ -171,7 +171,7 @@ We have automated the environment detection and experimental execution.
 ## Conclusion
 This research project successfully reverse-engineered the SQLite Pager to prove that database performance is not a mystery, but a result of **careful abstraction**. By implementing the **Triple-Constraint Model**, the Pager allows SQLite to achieve high concurrency and crash durability with minimal hardware resources. 
 
-Our experiments confirm that transitioning from **Rollback to WAL architecture** is the single most effective optimization for modern SSD-based systems, offering a **3.7x speedup** while simultaneously **reducing hardware wear by 73%**.
+Our experiments confirm that transitioning from **Rollback to WAL architecture** is the single most effective optimization for modern SSD-based systems, offering a **3.9x speedup** while simultaneously **reducing hardware wear by 73.6%**.
 
 ---
 
