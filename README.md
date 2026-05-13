@@ -97,11 +97,11 @@ sqlite_pager_project/
 ---
 
 ## Key Internal Mechanisms
-To demonstrate technical depth, we mapped the following critical C-level functions:
+To demonstrate technical depth, we mapped the following critical C-level functions in `sqlite3.c`:
 
-*   **`sqlite3PagerGet()`**: Handles the acquisition of a page. It encapsulates the entire logic of cache lookups and disk I/O.
-*   **`sqlite3PagerWrite()`**: The most important function for ACID. It implements the **Write-Ahead Principle**—it will not allow the B-tree to modify a page in memory until it has successfully recorded a rollback image in the journal.
-*   **`sqlite3PcacheFetchStress()`**: This function is the "Engine Alarm." It triggers only when the system is out of memory and must force a dirty page to disk to make room. Our **Experiment 2** was designed specifically to trigger this code path.
+*   **`sqlite3PagerGet()`** (Line 62386): Handles the acquisition of a page. It encapsulates the entire logic of cache lookups and disk I/O.
+*   **`sqlite3PagerWrite()`** (Line 62894): The most important function for ACID. It implements the **Write-Ahead Principle**—it will not allow the B-tree to modify a page in memory until it has successfully recorded a rollback image in the journal.
+*   **`sqlite3PcacheFetchStress()`** (Line 54243): This function is the "Engine Alarm." It triggers only when the system is out of memory and must force a dirty page to disk to make room. Our **Experiment 2** was designed specifically to trigger this code path.
 
 ---
 
