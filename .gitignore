@@ -3,5 +3,5 @@
 *.db-shm
 *.db-journal
 *.json
-!extended_results.json
+!masters_results.json
 
